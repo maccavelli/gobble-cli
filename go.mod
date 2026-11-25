@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/google/jsonschema-go v0.4.3
 	github.com/maccavelli/acp-go-sdk2 v1.36.0
-	github.com/maccavelli/go-llmprovider-sdk v1.32.0
+	github.com/maccavelli/go-llmprovider-sdk v1.33.0
 	github.com/maccavelli/go-llmprovider-sdk/authcontract v0.1.0
 	github.com/maccavelli/go-selfupdate-lib v1.26.3
 	github.com/maccavelli/go-tui-lib/v2 v2.12.1

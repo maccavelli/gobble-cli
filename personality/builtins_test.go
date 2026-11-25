@@ -218,3 +218,24 @@ func TestBuiltinsGuards(t *testing.T) {
 		}
 	}
 }
+
+// toolCutLines are turn.stop.max_tokens_tool's decided text in each built-in
+// personality, one variant each (0071-MADR P29, the owner's "Approve all four
+// (Recommended)").
+var toolCutLines = map[string]string{
+	Boring:    "The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.",
+	Dry:       "The reply ran out of room in the middle of a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.",
+	Snarky:    "Ran out of tokens halfway through a tool call, so that call is gone. Ask again, or set maxTokens for {model} in models.json.",
+	Bombastic: "Even genius hits the output limit: it cut a tool call mid-stride, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.",
+}
+
+// Each built-in personality says turn.stop.max_tokens_tool in its one decided
+// line, word for word (0071-MADR P29).
+func TestToolCutLines_0071(t *testing.T) {
+	for _, name := range Builtins {
+		got := builtins()[name].catalog.Variants(TurnStopMaxTokensTool)
+		if want := toolCutLines[name]; len(got) != 1 || got[0] != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+}

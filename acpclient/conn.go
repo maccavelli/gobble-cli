@@ -271,7 +271,8 @@ type Result struct {
 	SwitchTo string
 	// OutputLimit is the output limit the turn's last model call asked for,
 	// from the response's _meta.gobble.outputLimit; nil when the agent gives
-	// none (0071-MADR D10).
+	// none (0071-MADR D10). A call that carried no limit is Tokens 0, basis
+	// "none" (0071-MADR P35).
 	OutputLimit *OutputLimit
 }
 
@@ -350,7 +351,7 @@ func (s *Session) Prompt(ctx context.Context, p Prompt) (Result, error) {
 	r := Result{StopReason: string(resp.StopReason)}
 	if g, ok := jsonx.Member[map[string]any](resp.Meta, metaGobble); ok {
 		r.SwitchTo, _ = jsonx.Member[string](g, "switchTo") //nolint:errcheck // absent is none
-		if l, ok := jsonx.Member[OutputLimit](g, "outputLimit"); ok && l.Tokens > 0 {
+		if l, ok := jsonx.Member[OutputLimit](g, "outputLimit"); ok && l.Basis != "" {
 			r.OutputLimit = &l
 		}
 	}

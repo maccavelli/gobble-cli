@@ -95,8 +95,9 @@ func SearchListing(l Listing, query string) []string {
 func HasCatalog(l Listing) bool { return l.held }
 
 // List lists the built-in provider id's models with apiKey, through the
-// SDK's catalog.List with the capable profile, model metadata on and no
-// limit. It sends no generation and is bounded by the SDK at 10 s. It
+// SDK's catalog.List with the capable profile, o.ModelData's document,
+// if any, and no limit. It sends no generation and fetches no document,
+// and is bounded by the SDK at 10 s. It
 // passes no logger, so the SDK logs nothing of it. A listing that fails or
 // recommends nothing gives the static models, Live false and the reason in
 // Err; only an unknown id or a refused option is an error. o's APIKey,
@@ -126,9 +127,7 @@ func listWith(ctx context.Context, id string, src llmprovider.TokenSource, o Opt
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
 	}
 	opts = append(opts, o.sdkOptions()...)
-	if o.ModelMetadataURL != "" {
-		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
-	}
+	opts = append(opts, o.ModelData.options()...)
 	if len(o.LastGood) > 0 {
 		opts = append(opts, catalog.WithLastGood(o.LastGood, o.LastGoodAt))
 	}
@@ -156,9 +155,7 @@ func listChat(ctx context.Context, id, apiKey string, o Options) (Listing, error
 	opts := []llmprovider.Option{llmprovider.WithClientInfo(o.ClientName, o.ClientVersion)}
 	opts = append(opts, o.sdkOptions()...)
 	opts = append(opts, o.chatOptions(id)...)
-	if o.ModelMetadataURL != "" {
-		opts = append(opts, llmprovider.WithModelMetadataURL(o.ModelMetadataURL))
-	}
+	opts = append(opts, o.ModelData.options()...)
 	cat, err := catalog.List(ctx, llmprovider.ProviderID(id), llmprovider.NewStaticToken(apiKey), opts...)
 	if err != nil {
 		return Listing{}, fmt.Errorf("provider %s: list models: %w", id, mapError(err))

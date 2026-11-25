@@ -47,9 +47,11 @@ var (
 // whether the same request can succeed later, nil when not known; ResetAt
 // when the limit lifts; Limit which limit it was, one of the Limit
 // constants, set only when the provider's code or status states it;
-// Attempts the tries made, when the failure came after retries; and Window
+// Attempts the tries made, when the failure came after retries; Window
 // the limit's window as the provider stated it, never taken from the wait
-// (0049-MADR Q9).
+// (0049-MADR Q9); and Observed the output cap the service stated when it
+// refused the call's output limit, as the SDK validated and kept it, zero
+// when none was kept (0071-MADR P15).
 type APIError struct {
 	Status     int
 	RetryAfter time.Duration
@@ -63,6 +65,7 @@ type APIError struct {
 	Limit     string
 	Attempts  int
 	Window    time.Duration
+	Observed  LimitObservation
 }
 
 func (e *APIError) Error() string {

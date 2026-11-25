@@ -53,6 +53,10 @@ refusal
 
 cancelled
 
+## turn.stop.max_tokens_tool
+
+The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
+
 ## lines.hidden
 
 {n} lines hidden (--verbose shows all)

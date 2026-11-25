@@ -32,3 +32,23 @@ func TestResultOutputLimit_0071(t *testing.T) {
 		}
 	}
 }
+
+// A response whose call carried no limit, {0, "none"}, gives that limit,
+// not none (0071-MADR P35).
+func TestPromptResponseOutputLimit_0071(t *testing.T) {
+	t.Run("none", func(t *testing.T) {
+		agent := &acptest.ScriptAgent{Turns: []acptest.Turn{{Meta: `{"gobble":{"outputLimit":{"tokens":0,"basis":"none"}}}`}}}
+		c := start(t, agent, acpclient.Options{Name: "test", Version: "0.0.0"})
+		s, err := c.NewSession(t.Context(), acptest.Abs("/w"), func(acpclient.Update) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := s.Prompt(t.Context(), acpclient.Prompt{Text: "go"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := (acpclient.OutputLimit{Tokens: 0, Basis: "none"}); r.OutputLimit == nil || *r.OutputLimit != want {
+			t.Errorf("OutputLimit %+v, want %+v", r.OutputLimit, want)
+		}
+	})
+}

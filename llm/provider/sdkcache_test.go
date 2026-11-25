@@ -38,11 +38,9 @@ func (h *hangingListing) RoundTrip(r *http.Request) (*http.Response, error) {
 // the fetch and returns only after it has ended.
 func TestOptionsCacheReachesTheSDK(t *testing.T) {
 	run := metadataRuns.Add(1)
-	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
 	key := fmt.Sprintf("sk-test-%d-%d", os.Getpid(), run)
-	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing},
-		metadata: {status: http.StatusOK, body: "{}"}})
-	o.ModelMetadataURL = "https://" + metadata
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing}})
+	o.ModelData = modelData(t, "{}")
 	c := &Cache{}
 	o.Cache = c
 	if l, err := List(t.Context(), "openai", key, o); err != nil || !l.Live {

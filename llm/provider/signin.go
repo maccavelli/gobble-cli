@@ -341,7 +341,6 @@ func SignIn(ctx context.Context, id string, p Prompter, o SignInOptions, store L
 	}
 	listing := append([]llmprovider.Option{
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
-		llmprovider.WithoutModelMetadata(),
 	}, o.sdkOptions()...)
 	res, _, err := resolveCredential(ctx, w, wizard.Options{
 		Registry:         o.Set.registry(),

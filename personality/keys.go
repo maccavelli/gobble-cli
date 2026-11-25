@@ -20,7 +20,11 @@ const (
 	TurnStopMaxRequests     Key = "turn.stop.max_turn_requests"
 	TurnStopRefusal         Key = "turn.stop.refusal"
 	TurnStopCancelled       Key = "turn.stop.cancelled"
-	LinesHidden             Key = "lines.hidden"
+	// TurnStopMaxTokensTool is the agent's message after a turn whose reply
+	// the output limit cut while it wrote a tool call, which was dropped
+	// (0065-MADR D7; 0071-MADR P29).
+	TurnStopMaxTokensTool Key = "turn.stop.max_tokens_tool"
+	LinesHidden           Key = "lines.hidden"
 	// TranscriptEarlierOutput heads a reprint that leaves earlier output
 	// out: go-tui-lib's transcript.earlier-output (0035-MADR D14 step 5b).
 	TranscriptEarlierOutput Key = "transcript.earlier-output"
@@ -128,7 +132,7 @@ const (
 var Keys = []Key{
 	RetryOffline, RetryEmptyReply, RetryAttempt, CompactionStart, CompactionFailed, CompactionFailedTurn,
 	CompactionFailedSession, TurnWorking, TurnStopMaxTokens, TurnStopMaxRequests, TurnStopRefusal, TurnStopCancelled,
-	LinesHidden, TranscriptEarlierOutput,
+	TurnStopMaxTokensTool, LinesHidden, TranscriptEarlierOutput,
 	CommandUnknown, HelpHeading, UsageHeading, UsageCostUnknown, UsageEstimated, UsageNoAccount, SessionHeading,
 	ModelNone, ModelCurrent, ModelList, ModelUnknown, ModelSet, ThinkingCurrent, ThinkingList, ThinkingUnknown,
 	ThinkingSet, ModeCurrent, ModeList, ModeUnknown, ModeAlreadyPlan, ModePlanOn, ModeSet, NameCurrent, NameUsage,

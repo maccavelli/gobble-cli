@@ -104,6 +104,14 @@ const (
 	// WarningDeferralEmulated is the SDK's deferral_emulated. The agent logs
 	// it at Debug, once per model (0012-MADR D21).
 	WarningDeferralEmulated = "deferral_emulated"
+	// WarningToolCallCut is the SDK's tool_call_cut: the output limit cut a
+	// tool call before its arguments were whole, and the response dropped
+	// it (0071-MADR P9, P15, P29).
+	WarningToolCallCut = "tool_call_cut"
+	// WarningLimitLearned is the SDK's limit_learned: a cap a service stated
+	// when it refused a limit the SDK chose, kept for the process
+	// (0071-MADR P15).
+	WarningLimitLearned = "limit_learned"
 )
 
 // Usage is the token accounting for a turn.
@@ -134,9 +142,12 @@ const (
 	StopRefusal StopReason = "refusal"
 )
 
-// Done ends a stream.
+// Done ends a stream. OutputLimit is the output limit the call carried on
+// the wire, as the provider reports it; zero when it reports none
+// (0071-MADR P14).
 type Done struct {
-	StopReason StopReason `json:"stopReason,omitzero"`
+	StopReason  StopReason `json:"stopReason,omitzero"`
+	OutputLimit SentLimit  `json:"outputLimit,omitzero"`
 }
 
 func (Done) event() {}

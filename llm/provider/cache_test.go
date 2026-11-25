@@ -54,7 +54,7 @@ func send(t *testing.T, id, model string, cache llm.CacheRetention, o Options) e
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := &llm.Request{Model: model, Cache: cache, Messages: []llm.Message{text(llm.RoleSystem, "be brief"), text(llm.RoleUser, "hi")}}
+	req := assumedLimit(&llm.Request{Model: model, Cache: cache, Messages: []llm.Message{text(llm.RoleSystem, "be brief"), text(llm.RoleUser, "hi")}})
 	for _, err := range p.Stream(t.Context(), req) {
 		if err != nil {
 			return err

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-date: 2026-11-24
+date: 2026-11-25
 associated-madr: "0071-MADR-send-each-turn-the-models-output-cap-and-own-the-limit-policy.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -571,3 +571,270 @@ is (Recommended)"**. The MADR carries both (L15 annotated, the "unchanged" text 
 
 Exit of Phase 1b: every row of the phase tested (L15's 1b row, L43, L45), plants caught, gates recorded. The independent
 review is the coordinator's.
+
+### Phase 2 execution entry (2026-11-25)
+
+The owner approved the build, relayed by the coordinator, quoted exactly: **"Approve; build 0071 Phase 2 now (Recommended)"**.
+This pass builds Phases 2.0 and 2a as "Phase 2 as re-planned" and its second deviation record them, from the MADR's rows of its
+two 2026-11-25 amendments assigned to 2a (P1 to P12, P14 to P16, P29, P30, P35) and the 0065 rows placed there (R20 as P12,
+R24 as P9, D7's `turn.stop.max_tokens_tool` with P29). Phases 2b and 2c are not started. The tree was clean at `2cbec91`,
+which is 073fd1f with the records of this date only (no `.go`, `go.mod` or `go.sum` change), so it stands as the base the
+re-planned Phase 2 names. The agent stages nothing and commits nothing.
+
+### Phase 2.0, pass 1 (2026-11-25, at `2cbec91` and go-llmprovider-sdk `v1.33.0`)
+
+* **Step 1, re-ground.** The SDK read at its tag with `git show v1.33.0:<path>` (the checkout carries another stream's
+  uncommitted work; its working copy was not read). F13's lines hold as the amendment cites them: `limit_rule.go:58-83`
+  (`ChooseLimit`: a request's value sent as given, basis `request`; the refusal before sending at `:78-81`), `:207-240`
+  (`Check`: a kept cap at `:215-225`, a caller's value not resent at `:226-227`), `:258-290` (`Finish`, `markObserved`);
+  `api_error.go:189-199` (`Observed`); `catalog/limits.go:33-44`, `:105-118`, `:202-216`, `:335-345`, `:450-467`,
+  `:497-507`; `item.go:145-147`; `sent_limit.go:9-22`; `limit_observation.go:31-49`; `catalog/model_metadata.go:242-260`;
+  `internal/limitmemo/limitmemo.go:133-136`; `providers/kilo/kilo.go:531-534`. F19's removed names and F22's cut answers are
+  as the CHANGELOG's `[v1.33.0]` states them. gobble at `2cbec91`: every site F19 to F26 and P2 to P35 cite reads as cited
+  (`go.mod:16`; `llm/provider/provider.go:53-55`, `:215`, `:241-243`, `:411`, `:434-438`, `:549-559`, `:647-648`, `:873`;
+  `model.go:82-90`, `:107-111`, `:175-186`; `signin.go:344`; `image_test.go:209`; `list.go:129-131`, `:159-161`;
+  `list_test.go:103`, `:117-122`, `:143-164`, `:204`, `:227`, `:277`; `sdkcache_test.go:45`; `chatserver_test.go:122`;
+  `internal/cli/modelscmd_test.go:193`; `internal/cli/models.go:323`; `agent/agent.go:778-791`, `:906-933`;
+  `acpserver/agent.go:786-811`, `:914`; `acpserver/outputlimit.go:29-33`, `:50-61`, `:123`; `acpserver/title.go:187-191`;
+  `compaction/compaction.go:412`, `:415-422`, `:531`, `:556-558`; `llm/event.go:137-140`; `llm/errors.go:53-66`;
+  `llm/provider/record.go:128`; `record_test.go:381`, `:484`, `:526`; `replay_test.go:184`, `:206`; `workspace_test.go:18`;
+  `wire_test.go:131-156`, `:137`, `:158-160`; `agent/warning.go:40-56`; `acpclient/conn.go:353`). No line moved; no SDK
+  fact changed. F1 to F18 and D1 to D13 are the record's facts at 97fa1f6, re-grounded by Phase 0 and built by Phase 1;
+  2a cites them only through the amendment's lines above.
+* **Step 2, the red list.** A scratch clone of `2cbec91` (`<scratch>/b0071p2/base`): `go get …@v1.33.0` and `go mod tidy`
+  (exit 0, `go.mod` and `go.sum` on the SDK's lines alone), P2's six deletions, P3's seam as a stub (`<scratch>/b0071p2/stub20.py`;
+  `Options.ModelMetadataURL` kept as an ignored field so the tests that set it compile). Without the stub, `go vet ./...`
+  fails at the six sites, `undefined: llmprovider.WithModelMetadataURL` (`list.go:130`, `:160`) and `undefined:
+  llmprovider.WithoutModelMetadata` (`model.go:176`, `provider.go:215`, `signin.go:344`, `image_test.go:209`). With it, `go vet
+  ./...` exit 0 on both modules; `go test -count=1 ./...` through `run-heavy`, this Mac: 28 tests red, in `llm/provider` and
+  `internal/cli` only (`<scratch>/b0071p2/logs/2.0-redlist.txt`):
+  * P4: `TestListingSearchByFacts` (`list_test.go:287: vision [], want the model whose input holds image`),
+    `TestModelsSearchListsFactsFirst` (`modelscmd_test.go:216: models list vision: exit 0, ids ["aaa-vision"]`).
+  * P5: `TestListFullCatalog` (`list_test.go:118: requests ["GET api.openai.com/v1/models"], want the listing with the key
+    and the metadata document`), `TestListFetchesMetadata` (`list_test.go:162`).
+  * P8: 24 tests, each refused before sending on a Claude or OpenCode messages route (`llmprovider: invalid request: claude:
+    no source states an output limit for model "claude-haiku-5-5", and the wire requires one: …`), or counting 0 requests
+    for that refusal (`cache_test.go:112`, `:157`): `TestWireDeferral`, `TestDeferralAfterCancelledTurn`, `TestWireLimits`,
+    `TestWireEmptyAnswer`, `TestWireRefusal`, `TestWireReplay`, `TestWireCases`, `TestWireRateLimitResets`,
+    `TestWireToolResultError`, `TestWireStrict`, `TestModelCallSignatureResend`, `TestWireSignatureRetry`, `TestWireWorkspace`,
+    `TestWireStatedWindow`, `TestWireBudgetLimit`, `TestCacheWire`, `TestSessionIDPerProvider`, `TestImageWires`,
+    `TestTextOnlyModelImage`, `TestStreamIsLive`, `TestFailureAfterFirstDeltaNotRetried`, `TestProviderRetryReported`,
+    `TestWireBaseURL`, `TestWireRejectedKey`.
+* **Deviation (2026-11-25), the red list's length.** The second deviation's list (the `wireStream` callers and five direct
+  sites) is short of the run by eleven tests, and one of its sites is not red (`record_test.go:484`, whose `callReq()` names
+  4,096). Every extra red is the refusal before sending that P8's row decides ("a test … that Phase 2.0's red run finds
+  refused by `limit_rule.go:78-81`"); none is a red no row names, so this is no stop. The MADR's dated note of this date
+  records the measured list. No decision changes.
+* **Step 3, docs.** `README.md:178` and `docs/architecture.md:202` name `v1.32.0`; `llm/provider/provider.go:53-55`
+  (`ModelMetadataURL`), `:211` ("the model metadata fetch are off") and `llm/provider/list.go:98` ("model metadata on") name
+  the fetch. The `v1.32.0` citations at `list.go:57`, `signin.go:173`, `signinrun.go:219`, `:234` cite that tag's code as
+  history and stay. `docs/guides/models-json.md` and `docs/guides/choosing-a-model.md` name neither.
+
+Exit: met; nothing but scratch changed (and this record).
+
+### Phase 2a, pass 1 (2026-11-25, from `2cbec91`)
+
+Built in a scratch clone (`<scratch>/b0071p2/work`, each step a recorded script beside it), then copied into the tree over
+files checked equal to `2cbec91`'s (`to_tree.py`); `go get github.com/maccavelli/go-llmprovider-sdk@v1.33.0` and `go mod
+tidy` were then run in the tree: exit 0, `go.mod:16` at `v1.33.0`, `go.sum` on the SDK's two lines alone, no `replace`,
+acpext's pin unchanged.
+
+* **P1, P2.** `go.mod`; the six sites: `New`'s and the wizard's `WithoutModelMetadata` deleted, the lookups' `opts` a clone
+  of the SDK options, `image_test.go`'s option deleted, `list.go`'s two `WithModelMetadataURL` sites hand
+  `Options.ModelData`; `Options.ModelMetadataURL` removed.
+* **P3.** `llm/provider/modeldata.go`: `ModelData` (the parsed `catalog.Metadata`), `ParseModelData` (over
+  `catalog.ParseMetadata`), `Options.ModelData`; only `List` and `listChat` read it.
+* **P4, P5.** The URL sites hand the bytes they served (`modelData(t, …)`; `factMetaDoc` in `internal/cli`);
+  `chatserver_test.go:122`'s field deleted; `TestListFetchesMetadata` deleted; `TestListFullCatalog` asserts one request,
+  the listing's, with the key.
+* **P6.** `internal/cli/models.go`: `builtInModelData`, the built-in copy parsed once, set on the listing's `Options` in
+  `modelListing` alone.
+* **P8.** `wire_test.go`'s `assumedLimit` (16,384 when a request names none), called by `wireStream` beside `req.Model =
+  model` and at each other refused test's request; no other assertion changed.
+* **P9 to P12, P29 (adapter).** No production change: at the tag the adapter already yields a cut answer's whole calls and
+  its `tool_call_cut` warning, and `stopOf` gives `tool_use` or `max_tokens`; Kilo's window form maps to
+  `llm.ErrContextOverflow`.
+* **P14 to P16.** `llm/sentlimit.go` (`SentLimit`, `LimitObservation`); `Done.OutputLimit`; `APIError.Observed`, set in
+  `mapErrorAt`; `WarningToolCallCut`, `WarningLimitLearned`; the record's four `out_limit*` fields on a call whose done event
+  arrived. 0070's `TestModelCallRecordHoldsNoContent/no_out_limit` is replaced by `TestModelCallRecordOutLimit_0071`, and its
+  key list takes the four fields.
+* **P29.** `personality.TurnStopMaxTokensTool` (`turn.stop.max_tokens_tool`): boring's line as the MADR writes it, and one
+  line each in dry, snarky and bombastic, in their voices, each with `{model}` and the same advice; `TestBoringIsTodaysText`
+  pins boring's text, as each key since 0022 is pinned. `acpserver/cutcall.go`: the turn's provider is watched (a Prober
+  stays one) for a call that ends `max_tokens` after a `tool_call_cut` warning; the turn then sends the line as an agent
+  message after its text, live only, so the terminal and headless print and JSON carry it as agent text (0065 D8's
+  channel).
+* **P30.** `acpserver/title.go`: a title call that ends `max_tokens` writes its usage and returns an error, logged, and
+  names nothing.
+* **P35.** `llm.BasisNone`; `turnMeta` and `acpclient` keep a limit whose basis is set, so `{0, "none"}` is carried and a
+  turn with no call still carries none (L30).
+* **Exported names**, all in P23: `provider.ModelData`, `provider.ParseModelData`, `provider.Options.ModelData`,
+  `llm.SentLimit`, `llm.Done.OutputLimit`, `llm.LimitObservation`, `llm.APIError.Observed`, `llm.WarningToolCallCut`,
+  `llm.WarningLimitLearned`, `llm.BasisNone`, `personality.TurnStopMaxTokensTool`; removed: `provider.Options.ModelMetadataURL`
+  (P2).
+
+Rows to tests (files): P1, P2 the build; P3 `TestListHandsModelData_0071` (`handed`, `none`, `chat`; `list_test.go`); P4 the
+URL sites' tests; P5 `TestListFullCatalog`; P6 `TestListingRanksByBuiltInCopy_0071` (`internal/cli/limit_test.go`); P7
+`TestEveryCallNamesLimit_0071` (`turn`, `summary`, `title`; `acpserver/outputlimit_test.go`); P8 the 24 tests; P9
+`TestAgentTurn_SalvageCompleteCalls_0065` (`llm/provider/cut_test.go`, `agent/outputlimit_test.go`); P10
+`TestResponsesCutTextStops_0071`; P11 `TestReasoningOnlyCutUnchanged_0071`; P12 `TestAgentTurn_KiloWindowFormCompacts_0065`
+(the adapter's kind in `cut_test.go`; `room` and `over` in `agent`); P14 `TestDoneCarriesOutputLimit_0071` (`asked`,
+`raised_for_thinking`; `llm/provider/sentlimit_test.go`); P15 `TestAPIErrorCarriesObserved_0071` (`anthropic_cap`,
+`openrouter_window`); P16 `TestModelCallRecordOutLimit_0071` (`completed`, `failed`); P29 `TestCutCallAfterText_0071`
+(`chat`, `messages` in `cut_test.go`; `agent`; `cut_call`, `cut_text` in `acpserver`; `cli`, `headless_json` in
+`internal/cli/limit_test.go`) and `TestOnlyCutCall_0071`; P30 `TestTitleCutDiscarded_0071`; P35
+`TestPromptResponseOutputLimit_0071/none` (`acpserver`, `acpclient`). A test name shared by two packages is one row's test
+in each layer, as the PLAN's table names two files for it.
+
+* **Reds at the base.** The tests of behaviour that exists at `2cbec91`, copied onto a clean clone of it (go-llmprovider-sdk
+  `v1.32.0`) with the regions that name 2a's names left out and `llm.WarningToolCallCut` written as its string
+  (`<scratch>/b0071p2/base_copy.py`), run there; each red is on its assertion (line numbers are the base copy's):
+  * P9: `cut_test.go:160: calls [], stop "", err … llmprovider: incomplete response: length; want the whole call alone, then
+    tool_use`.
+  * P10: `cut_test.go:169: text "half an answ", stop "", err … incomplete response: max_output_tokens; want the text, then
+    max_tokens`.
+  * P12 (the adapter): `cut_test.go:190: err llm: api status 400: llmprovider: invalid request: kilo HTTP 400 … (other), want
+    llm.ErrContextOverflow`.
+  * P29: `cut_test.go:207` (`chat`, `messages`: `… incomplete response: length; want the text, no call, max_tokens`);
+    `acpserver` `outputlimit_test.go:728: agent messages ["Let me read it."], want ["Let me read it." "\n\nThe reply hit the
+    output limit while writing a tool call, …"]`; `internal/cli` `limit_test.go:241` (`cli`: the stdout lacks the line) and
+    `:252` (`headless_json`: `Text:Let me read it. StopReason:max_tokens …, want max_tokens and the text, then the line`).
+  * P30: `title_test.go:386: the session took the cut title; logs ""`, `:389: logs "", want the cut named`.
+  * P35: `acpserver` `outputlimit_test.go:583: _meta {} (<nil>), want {"gobble":{"outputLimit":{"tokens":0,"basis":"none"}}}`;
+    `acpclient` `outputlimit_test.go:51: OutputLimit <nil>, want {Tokens:0 Basis:none}`.
+  * Guards green at the base: P11 `TestReasoningOnlyCutUnchanged_0071`, `TestOnlyCutCall_0071`; P7
+    `TestEveryCallNamesLimit_0071` (all three); P12 `agent` `room` and `over`; the `agent` parts of P9 and P29; `acpserver`
+    `TestCutCallAfterText_0071/cut_text`.
+  * First run, two reds were a wait's timeout (`title_test.go:380`, `limit_test.go:228: condition not met within 5 s`), not
+    an assertion: each test now waits for its work to end either way, then asserts; the reds above are the rerun's.
+  * New names, red from their plants: P1 to P6, P14 to P16, and P29's key in `TestBoringIsTodaysText`.
+* **Plants** (`<scratch>/b0071p2/plants.py`: one production edit at a time on a scratch copy of the built tree, undone
+  before the next; the row's package(s) run with every 2a test and every P8 test selected; logs in
+  `<scratch>/b0071p2/logs/plants/`). The harness's control, a comment changed, was reported not caught, as it must be. Every
+  plant caught:
+  * P1a, the pin reverted (`go.mod` and `go.sum` at `v1.32.0`): the build, `llm/provider/modeldata.go:37:38: undefined:
+    catalog.WithMetadata`. P1b, `New`'s option restored: `provider.go:218:15: undefined: llmprovider.WithoutModelMetadata`.
+  * P3a (P3, P4), `listWith` drops `o.ModelData`: `TestListHandsModelData_0071` (`list_test.go:149: vision [], want
+    ["gpt-6-luna"]`), `TestListingSearchByFacts` (`:319`), `TestModelsSearchListsFactsFirst` (`modelscmd_test.go:225`), and
+    `TestListingRanksByBuiltInCopy_0071`, which lists through `listWith`. P3b, `listChat` drops it:
+    `TestListHandsModelData_0071` alone (`list_test.go:168: vision [], want the document's image model`).
+  * P5, `listWith` lists with no credential: `TestListFullCatalog` (`list_test.go:115: requests ["GET
+    api.openai.com/v1/models"], want one: the listing with the key`); also `TestListServesLastGood` and
+    `TestListingSearchByFacts`, whose listings then fail.
+  * P6a, the copy left off the listing's `Options`: `limit_test.go:297: the listing's Options carry no document`. P6b, the
+    copy in `providerOptions` (what `New` and the wizard are given): `limit_test.go:320: the options New and the sign-in
+    wizard are given carry a document`.
+  * P7a, `OutputLimit` left nil: `outputlimit_test.go:667: the turn asked for 0, want a limit` (and L27's
+    `TestPromptResponseOutputLimit_0071`). P7b, the ladder's `FitOutput` times 0: `:682: summary 1 asked for 0, want a
+    limit`. P7c, the title's 0 when its cap is unknown: `:697: the title asked for 0 with its model's cap unknown, want a
+    limit`.
+  * P8, `toRequest` drops `MaxOutputTokens`: each of the 24 refused again (e.g. `wire_test.go:192: … no source states an
+    output limit for model "claude-haiku-5-5" …`; `cache_test.go:112: 0 requests, want 1`), and the 2a tests that stream a
+    Claude route (P14, P15, P16, P29's `messages`).
+  * P9a, `stopOf` tests `FinishLength` before calls: `cut_test.go:160: calls ["read {\"path\":\"x\"}"], stop "max_tokens",
+    err <nil>; want the whole call alone, then tool_use`. P9b, the turn ends at a `tool_call_cut` warning: `agent`
+    `outputlimit_test.go:235: 1 calls, stop "max_tokens"; want the whole call run and a second call`.
+  * P10, `stopOf`'s `FinishLength` case removed: `cut_test.go:174: … stop "end_turn" …; want the text, then max_tokens` (and
+    P29's `cut_test.go:212`).
+  * P11, the adapter maps the error to `Done{StopMaxTokens}`: `cut_test.go:183: err <nil>, dones [{max_tokens {0 false  }}];
+    want llm.ErrIncomplete, not an empty reply, and no Done` (and `TestOnlyCutCall_0071`, `TestWireEmptyAnswer`).
+  * P12, `limitRefused` reads the overflow first: `agent` `outputlimit_test.go:274: caps [60002 60002], want [60002 31072]`.
+  * P14a, `Done.OutputLimit` left zero: `sentlimit_test.go:77: Done.OutputLimit {Tokens:0 Sent:false Basis: Source:}, want
+    {Tokens:32000 Sent:true Basis:request Source:}`. P14b, the request's value for the wire's: `:99: Done.OutputLimit
+    {Tokens:2000 …} with 8192 on the wire; want the raised wire value`.
+  * P15a, `Observed` not copied: `sentlimit_test.go:132: Observed {Model: … Tokens:0 Seen:0001-01-01 …}`. P15b, a zero
+    `Seen`: `:132: Observed {Model:claude-haiku-5-5 … Tokens:32000 Seen:0001-01-01 00:00:00 +0000 UTC}`.
+  * P16a, the fields on a failed call: `record_test.go:549: out_limit present on a call that failed before its done event`.
+    P16b, `out_limit_basis` omitted: `record_test.go:541: fields map[…], want out_limit 4096, sent, basis request, no
+    source`.
+  * P29a, the line omitted: `acpserver` `outputlimit_test.go:745: agent messages ["Let me read it."], want […]`, and
+    `internal/cli` `cli` and `headless_json` (`limit_test.go:250`, `:261`). P29b, `turn.stop.max_tokens`'s line shown:
+    `outputlimit_test.go:745: agent messages ["Let me read it." "\n\nmax_tokens"], want […]`, and both `internal/cli` cases.
+    P29c, the text dropped (the agent's reply text reset at the warning): `agent` `outputlimit_test.go:304: the turn's
+    messages ["user:go"] lack the reply's text`.
+  * P30, the stop reason ignored: `title_test.go:386: the session took the cut title; logs ""`.
+  * P35a, `turnMeta`'s `Tokens > 0` kept: `outputlimit_test.go:595: _meta {} (<nil>), want …`. P35b, `acpclient`'s kept:
+    `outputlimit_test.go:51: OutputLimit <nil>, want {Tokens:0 Basis:none}`.
+  * Plants caught beyond their own row's test are named above; each is caught by its own.
+* **Lint, same pass.** `make pre-add-check` first found `acpserver/title_test.go:381` not gofmt'd (a long `waitFor` line,
+  wrapped by gofmt); `gofmt -w`, no suppression, re-run: exit 0.
+* **Docs.** `README.md:178`, `docs/architecture.md:202` at `v1.33.0`; `docs/architecture.md`'s `agent` (`:111`), `llm`
+  (`:112`), `llm/provider` (`:113`), `acpserver` (`:130`), `acpclient` (`:131`) and `internal/cli` (`:135`) rows; the doc
+  comments of `Options.ModelData`, `New` and `List`.
+* **Gates** (exit codes taken before any filter; logs in `<scratch>/b0071p2/logs/gate-*.log`; no log has a fallback line):
+
+  | Command | Where | Exit |
+  | :--- | :--- | ---: |
+  | `make pre-add-check FILES=…` (the 35 changed `.go` files), `run-heavy` | this Mac | 2, then 0 (the gofmt finding above) |
+  | `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+  | `make preflight`, `run-heavy` | this Mac | 0, "preflight passed" |
+  | `make preflight race`, `run-on-host --need linux --race` | the Linux machine (linux/amd64, not WSL) | 0, "preflight passed", both modules `ok` under `-race` |
+  | `make preflight`, `run-on-host --need windows` | the Windows laptop (windows/amd64) | 0, "preflight passed" |
+  | `make check-test-isolation` | this Mac | 0 |
+  | `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+  | `denyscan.py --root <gobble> --changed` | this Mac | 0, "0 hit(s) in 45 file(s)" |
+  | `github-disclosure.py redact` (dry run) | this Mac | 0, "would edit 0 file(s)" |
+  | `go vet -tags live ./llm/provider/ ./internal/cli/ ./acpserver/` | this Mac | 0 |
+
+  `make check-test-isolation` runs both modules' tests, a heavy run, and it ran outside `run-heavy`, beside the queued
+  pre-add check: a breach of the queue rule, noted; its result stands (exit 0).
+* **Not done in 2a:** no live call (2a names none); Phases 2b and 2c are not started. An independent review is the
+  coordinator's.
+
+Exit of Phase 2a (pass 1): every row of 2a tested, red at the base or held by its plant; plants caught; gates recorded;
+docs rows returned.
+
+### Deviation (2026-11-25): the review's notes, Phase 2a pass 1 continuing
+
+The independent review passed Phase 2a with notes, relayed by the coordinator; they are closed in pass 1 (no second pass).
+The owner's answers, quoted exactly: **"Approve all four (Recommended)"** (P29's four lines are the decided text) and
+**"Show the notice anyway (Recommended)"** (new row P36). The MADR carries both ("Amendment of 2026-11-25, third"), with the
+measured note on Kilo's and Ollama's listings.
+
+| Part | Rows | Test | File | Red at the base because | Plant |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 2a | P29 (its lines) | `TestToolCutLines_0071` (each built-in personality's `turn.stop.max_tokens_tool` is its one decided variant) | `personality/builtins_test.go` | new key | one personality's line changed (snarky's) |
+| 2a | P36 | `TestCutCallNoticeBeforeQueued_0071` (text, then a cut call, a follow-up queued: the notice once, after the text and before the queued message's echo; the turn goes on to the next call and ends `end_turn`) | `acpserver/outputlimit_test.go` | no notice at the base | the notice sent only when the turn ends `max_tokens` |
+| 2a | P7 (review) | `TestEveryCallNamesLimitColdClaude_0071` (built as a test of its own beside `TestEveryCallNamesLimit_0071`, which runs on scripts): a turn through `provider.New("claude", …)` on a canned wire, with no source stating the model's limit, is sent, not refused before sending | `acpserver/outputlimit_test.go` | a guard | the turn's limit removed (`OutputLimit` nil): the SDK refuses the call before sending |
+
+The review's other notes: `acpserver/outputlimit_test.go`'s check of `llm.BasisNone` against its own value, which cannot
+fail, compares `turnMeta`'s output with the constant instead; `internal/cli/limit_test.go`'s check that the lookup of
+`o3-mini` has a window, which passes at the base, is dropped (P6's checks are the listing's document and `providerOptions`').
+Files added to the phase's scope: `personality/builtins_test.go`.
+
+**Result, pass 1 continued.**
+
+* **Built.** `acpserver/cutcall.go`'s `take` reads and forgets the cut, so the notice is sent once; `acpserver/agent.go`
+  sends it (`sayCut`) before the first `agent.Queued` echo after a cut call (P36), as well as at a `max_tokens` end (P29).
+  The tests above, and the two review fixes.
+* **Red at the base** (the base copy, `<scratch>/b0071p2/redbase`): P36 `outputlimit_test.go:760: updates ["agent Let me
+  read it." "user and then this" "agent on it"], want ["agent Let me read it." "agent \n\nThe reply hit the output limit …"
+  "user and then this" …]`. `TestEveryCallNamesLimitColdClaude_0071` is a guard (at `v1.32.0` the SDK sends 8,192), held by
+  its plant; `TestToolCutLines_0071` names the new key, held by its plant.
+* **Plants** (`plants.py`, every plant of 2a run again on a scratch copy of the tree, the control again not caught; logs in
+  `<scratch>/b0071p2/logs/plants2/`): all caught, the earlier ones as before. New: P29d, snarky's line changed,
+  `builtins_test.go:238: snarky: ["Ran out of tokens halfway through a tool call, so that call is history. …"], want "Ran out
+  of tokens halfway through a tool call, so that call is gone. …"`; P36, the queued notice not sent, `outputlimit_test.go:851:
+  updates ["agent Let me read it." "user and then this" "agent on it"], want […]`; P7d, the turn's limit removed,
+  `outputlimit_test.go:816: the turn failed: {"code":-32603,…"llmprovider: invalid request: claude: no source states an
+  output limit …`; P35c, `BasisNone`'s value changed, `outputlimit_test.go:605: llm.BasisNone's _meta
+  {"gobble":{"outputLimit":{"tokens":0,"basis":"no"}}} …, want …"none"…`. P29b now also turns
+  `TestCutCallNoticeBeforeQueued_0071` red.
+* **Kilo and Ollama.** Measured, not built: the built-in copy changes neither listing's order (the MADR's third amendment,
+  "Measured"; the probe was a scratch test over the SDK's Kilo fixture, removed with its copy).
+* **Lint, same pass.** `make pre-add-check` found `acpserver/outputlimit_test.go:15` not goimports-sorted (the new imports
+  placed after the module's); sorted by hand, re-run: exit 0.
+* **Docs.** `docs/architecture.md:130`, the `acpserver` row: the notice before the first queued message (P36).
+* **Gates, pass 1 continued** (this Mac, every heavy run through `run-heavy`; logs `gate-*2.log`, `gate-preadd3.log`,
+  `gate-preadd4.log`):
+
+  | Command | Where | Exit |
+  | :--- | :--- | ---: |
+  | `make pre-add-check FILES=…` (the 36 changed `.go` files), `run-heavy` | this Mac | 2 (goimports), then 0 |
+  | `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+  | `make check-test-isolation`, `run-heavy` | this Mac | 0 |
+  | `make check-records`, `make markdownlint` | this Mac | 0, 0 issues |
+  | `denyscan.py --changed` | this Mac | 0, 0 hits |
+  | `github-disclosure.py redact` (dry run) | this Mac | 0, 0 files |
+
+  `make preflight` and `make race` were not run again: not asked for this continuation.

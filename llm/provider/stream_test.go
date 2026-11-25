@@ -65,7 +65,7 @@ func TestStreamIsLive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := wireRequest()
+			req := assumedLimit(wireRequest())
 			req.Model = c.model
 			var once sync.Once
 			var text strings.Builder
@@ -119,7 +119,7 @@ func TestFailureAfterFirstDeltaNotRetried(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := wireRequest()
+			req := assumedLimit(wireRequest())
 			req.Model = c.model
 			var text strings.Builder
 			var failure error
@@ -169,7 +169,7 @@ func TestProviderRetryReported(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := wireRequest()
+			req := assumedLimit(wireRequest())
 			req.Model = c.model
 			var text strings.Builder
 			var retries []llm.ProviderRetry

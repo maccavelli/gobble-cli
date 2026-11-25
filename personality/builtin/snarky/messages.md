@@ -108,6 +108,10 @@ placeholders.
 - cancelled. Probably for the best.
 - cancelled
 
+## turn.stop.max_tokens_tool
+
+- Ran out of tokens halfway through a tool call, so that call is gone. Ask again, or set maxTokens for {model} in models.json.
+
 ## lines.hidden
 
 - {n} lines hidden. You're welcome. (--verbose shows all)

@@ -19,7 +19,7 @@ func TestWireWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrWorkspace) || ErrorKind(err) != "workspace" {
+	if _, err := drain(t, p, assumedLimit(wireRequest())); !errors.Is(err, llm.ErrWorkspace) || ErrorKind(err) != "workspace" {
 		t.Fatalf("err %v (%s), want llm.ErrWorkspace", err, ErrorKind(err))
 	}
 	for _, c := range []struct{ id, model, want string }{
@@ -32,7 +32,7 @@ func TestWireWorkspace(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		drain(t, p, wireRequest()) //nolint:errcheck // only the request's header matters
+		drain(t, p, assumedLimit(wireRequest())) //nolint:errcheck // only the request's header matters
 		w.mu.Lock()
 		headers := w.headers
 		w.mu.Unlock()

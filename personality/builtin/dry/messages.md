@@ -108,6 +108,10 @@ precision (0022-MADR D7). Every variant keeps boring's placeholders.
 - cancelled, as requested
 - the turn was cancelled; we shall speak no more of it
 
+## turn.stop.max_tokens_tool
+
+- The reply ran out of room in the middle of a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
+
 ## lines.hidden
 
 - {n} lines omitted for brevity (--verbose shows all)

@@ -789,8 +789,9 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// limit's line, and a workspace's advice in place of the service's words
 	// (0070-MADR D2, Q10).
 	w.errText = func(err error) string { return errorData(a.provOf(s), limitLine(err, limits.last, chosen)).Error }
+	called, cuts := watchCuts(model)
 	cfg := agent.Config{
-		Provider: model,
+		Provider: called,
 		Tools:    tools,
 		Model:    chosen,
 		Thinking: think,
@@ -828,6 +829,13 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		env.Terminal = clientTerminal{conn: conn, session: p.SessionId, created: out.terminal}
 	}
 	out.locate(tools, env)
+	// sayCut tells the user that the limit cut a tool call after the reply's
+	// text, and the call was dropped: an agent message after the text, live
+	// only (0071-MADR P29; 0065-MADR D7, D8).
+	sayCut := func() {
+		out.send(acp.UpdateAgentMessageText("\n\n" + a.voice(s).Text(personality.TurnStopMaxTokensTool,
+			personality.Args{argModel: chosen})))
+	}
 	for ev, err := range ag.Run(turnCtx, env, history, prompt) {
 		if err != nil {
 			out.flush()
@@ -850,8 +858,19 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			s.waiting = r.Phase == agent.RetryStart
 			a.mu.Unlock()
 		}
+		if _, ok := ev.(agent.Queued); ok && cuts.take() {
+			// Queued messages carry the turn on after a call the limit cut
+			// while it wrote a tool call: the notice comes first, after the
+			// reply's text (0071-MADR P36, "Show the notice anyway
+			// (Recommended)").
+			out.flush()
+			sayCut()
+		}
 		out.event(ev, &last)
 		if end, ok := ev.(agent.End); ok {
+			if end.StopReason == agent.StopMaxTokens && cuts.take() {
+				sayCut()
+			}
 			msgs := stamped(end.Messages, llm.Origin{Provider: w.provider, Model: w.model}, end.StopReason == agent.StopCancelled)
 			a.mu.Lock()
 			s.history = append(s.history, msgs...)
@@ -903,7 +922,8 @@ func clearedMeta(s *liveSession) (map[string]any, error) {
 // turnMeta is a turn's response _meta: with cancelled, the session's
 // queues emptied into _meta.gobble.cleared; and the output limit of the
 // turn's last model call as _meta.gobble.outputLimit, which a turn with no
-// call carries none of (0071-MADR D10). It is nil when there is neither.
+// call carries none of (0071-MADR D10); a call that carried no limit
+// carries {0, "none"} (P35). It is nil when there is neither.
 func turnMeta(s *liveSession, cancelled bool, lim llm.OutputLimit) (map[string]any, error) {
 	var g turnGobble
 	if cancelled {
@@ -911,7 +931,7 @@ func turnMeta(s *liveSession, cancelled bool, lim llm.OutputLimit) (map[string]a
 			g.Cleared = &clearedQueues{FollowUp: followUp, Steering: steering}
 		}
 	}
-	if lim.Tokens > 0 {
+	if lim.Basis != "" {
 		g.OutputLimit = &lim
 	}
 	if g.Cleared == nil && g.OutputLimit == nil {

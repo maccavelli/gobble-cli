@@ -163,6 +163,13 @@ func TestModelsSearchIsTheSDKs(t *testing.T) {
 	}
 }
 
+// factMetaDoc is the models.dev document factWire served by URL before
+// go-llmprovider-sdk v1.33.0, which fetches none: factList hands the same
+// bytes in as provider.Options.ModelData (0071-MADR P4).
+const factMetaDoc = `{"openai":{"id":"openai","models":{
+"gpt-6-luna":{"name":"Luna","limit":{"context":128000},"modalities":{"input":["text","image"],"output":["text"]},"tool_call":true},
+"gpt-6-astra":{"name":"Astra","limit":{"context":400000},"modalities":{"input":["text"],"output":["text"]},"tool_call":true}}}}`
+
 // factWire answers one OpenAI listing and its models.dev document, and
 // nothing else, so the test never dials (0036-PLAN P5).
 type factWire struct {
@@ -175,9 +182,7 @@ func (w factWire) RoundTrip(r *http.Request) (*http.Response, error) {
 	case "api.openai.com/v1/models":
 		body, status = `{"object":"list","data":[{"id":"gpt-6-luna","object":"model"},{"id":"gpt-6-astra","object":"model"}]}`, http.StatusOK
 	case w.meta:
-		body, status = `{"openai":{"id":"openai","models":{
-"gpt-6-luna":{"name":"Luna","limit":{"context":128000},"modalities":{"input":["text","image"],"output":["text"]},"tool_call":true},
-"gpt-6-astra":{"name":"Astra","limit":{"context":400000},"modalities":{"input":["text"],"output":["text"]},"tool_call":true}}}}`, http.StatusOK
+		body, status = factMetaDoc, http.StatusOK
 	}
 	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}},
 		Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
@@ -189,8 +194,12 @@ func factList(meta string) func(context.Context, string, string, provider.Option
 		if id != "openai" {
 			return provider.Listing{Models: provider.Models(id)}, nil
 		}
+		data, err := provider.ParseModelData(strings.NewReader(factMetaDoc))
+		if err != nil {
+			return provider.Listing{}, err
+		}
 		return provider.List(ctx, id, key, provider.Options{
-			HTTPClient: &http.Client{Transport: factWire{meta: meta}}, ModelMetadataURL: "https://" + meta,
+			HTTPClient: &http.Client{Transport: factWire{meta: meta}}, ModelData: data,
 		})
 	}
 }

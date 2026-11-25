@@ -85,22 +85,19 @@ const kiloListing = `{"data":[` +
 	`"supported_parameters":["max_tokens","tools","reasoning"],"preferredIndex":6}]}`
 
 // A live listing gives the full curated catalog, past the static six, from
-// one request with the key, beside the model metadata document, which gets
-// no credential, and no generation (0020-MADR D2, F7). The models past the
-// six are the SDK's order: from go-llmprovider-sdk v1.14.0, newest first by
-// release date, then by id (its 0041-MADR D3, llmprovider/catalog/menu.go),
-// so the two undated ones here sort by id. From v1.14.0 every provider's
-// listing but Kilo's and Ollama's fetches the document (0023-PLAN, deviation
-// 1). The document's URL and the key are each run's own, since the SDK
-// caches each document URL, and from v1.14.0 each listing's key, for the
-// process.
+// one request, the listing's, with the key, and no generation (0020-MADR
+// D2, F7). The models past the six are the SDK's order: from
+// go-llmprovider-sdk v1.14.0, newest first by release date, then by id (its
+// 0041-MADR D3, llmprovider/catalog/menu.go), so the two undated ones here
+// sort by id. From v1.33.0 the SDK fetches no model metadata document: the
+// listing ranks by the one Options.ModelData hands in, here the bytes the
+// fetch was served before (0071-MADR P4, P5). The key is each run's own,
+// since from v1.14.0 the SDK caches each listing's key for the process.
 func TestListFullCatalog(t *testing.T) {
 	run := metadataRuns.Add(1)
-	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
 	key := fmt.Sprintf("sk-test-%d-%d", os.Getpid(), run)
-	c, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing},
-		metadata: {status: http.StatusOK, body: "{}"}})
-	o.ModelMetadataURL = "https://" + metadata
+	c, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing}})
+	o.ModelData = modelData(t, "{}")
 	l, err := List(t.Context(), "openai", key, o)
 	if err != nil {
 		t.Fatal(err)
@@ -114,12 +111,77 @@ func TestListFullCatalog(t *testing.T) {
 	for i, r := range seen {
 		byRequest[r] = auth[i]
 	}
-	if len(seen) != 2 || byRequest["GET "+openaiModels] != "Bearer "+key {
-		t.Fatalf("requests %q, want the listing with the key and the metadata document", seen)
+	if len(seen) != 1 || byRequest["GET "+openaiModels] != "Bearer "+key {
+		t.Fatalf("requests %q, want one: the listing with the key", seen)
 	}
-	if a, ok := byRequest["GET "+metadata]; !ok || a != "" {
-		t.Fatalf("the metadata document: requested %v, with Authorization %q; want it requested with none", ok, a)
+}
+
+// A listing reads the document Options.ModelData hands in, and fetches none:
+// handed, List's search reads its facts; the same through a Chat
+// Completions server's listing; nil hands none, so the facts are not known.
+// No case requests a document (0071-MADR P3).
+func TestListHandsModelData_0071(t *testing.T) {
+	fetched := func(t *testing.T, seen []string) {
+		t.Helper()
+		for _, s := range seen {
+			if f := strings.Fields(s); len(f) < 2 || !strings.HasSuffix(f[1], "/models") {
+				t.Errorf("request %q, want only the listing's", s)
+			}
+		}
 	}
+	for _, c := range []struct {
+		name   string
+		data   *ModelData
+		vision []string
+	}{
+		{"handed", modelData(t, factDoc), []string{"gpt-6-luna"}},
+		{"none", nil, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			run := metadataRuns.Add(1)
+			w, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: factModels}})
+			o.ModelData = c.data
+			l, err := List(t.Context(), "openai", fmt.Sprintf("sk-data-%d-%d", os.Getpid(), run), o)
+			if err != nil || !l.Live {
+				t.Fatalf("listing %+v (%v), want live", l, err)
+			}
+			if got := SearchListing(l, "vision"); !slices.Equal(got, c.vision) {
+				t.Errorf("vision %q, want %q", got, c.vision)
+			}
+			seen, _ := w.requests()
+			fetched(t, seen)
+		})
+	}
+	t.Run("chat", func(t *testing.T) {
+		// A base URL and key of each run's own, so no listing the SDK cached
+		// for the process answers.
+		run := metadataRuns.Add(1)
+		base := fmt.Sprintf("http://127.0.0.1:1/data-%d-%d/v1", os.Getpid(), run)
+		wire := &chatWire{list: factModels}
+		set, _ := chatSet(t, `{"providers":{"local":{"baseUrl":"`+base+`"}}}`)
+		l, err := List(t.Context(), "local", fmt.Sprintf("k-data-%d-%d", os.Getpid(), run), Options{Set: set, BaseURL: base,
+			HTTPClient: &http.Client{Transport: wire}, ModelData: modelData(t, factDoc)})
+		if err != nil || !l.Live {
+			t.Fatalf("listing %+v (%v), want live", l, err)
+		}
+		if got := SearchListing(l, "vision"); !slices.Equal(got, []string{"gpt-6-luna"}) {
+			t.Errorf("vision %q, want the document's image model", got)
+		}
+		wire.mu.Lock()
+		seen := slices.Clone(wire.seen)
+		wire.mu.Unlock()
+		fetched(t, seen)
+	})
+}
+
+// modelData is doc parsed as a test's models.dev document (0071-MADR P4).
+func modelData(t testing.TB, doc string) *ModelData {
+	t.Helper()
+	d, err := ParseModelData(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }
 
 // List ranks with the capable profile, which admits the kilo-auto router
@@ -135,33 +197,11 @@ func TestListCapableProfile(t *testing.T) {
 	}
 }
 
-// metadataRuns numbers TestListFetchesMetadata's metadata URLs, which the
+// metadataRuns numbers the listing tests' keys, each run's own, which the
 // clock cannot: on Windows it does not move between runs (0020-PLAN P1
-// deviation 2).
+// deviation 2). It numbered the metadata URLs too until go-llmprovider-sdk
+// v1.33.0 stopped fetching one (0071-MADR P5).
 var metadataRuns atomic.Int64
-
-// List fetches the model metadata the open catalogs rank with. The SDK
-// fetches it alongside the listing and waits for it only when the listing
-// answers, so the listing here answers (0020-PLAN P1 deviation 1); a URL of
-// each run's own keeps the SDK's in-process cache, and its remembered
-// failures, from answering (0020-MADR D2, F6), and a key of each run's own
-// keeps its listing cache, from go-llmprovider-sdk v1.14.0, from answering
-// the listing (0023-PLAN, deviation 1).
-func TestListFetchesMetadata(t *testing.T) {
-	run := metadataRuns.Add(1)
-	path := fmt.Sprintf("/%s-%d-%d.json", t.Name(), os.Getpid(), run)
-	zen := `{"object":"list","data":[{"id":"claude-haiku-5-5","object":"model"},{"id":"deepseek-v4.1-flash","object":"model"}]}`
-	c, o := cannedClient(map[string]route{"opencode.ai/zen/v1/models": {status: http.StatusOK, body: zen}})
-	o.ModelMetadataURL = "https://metadata.test" + path
-	l, err := List(t.Context(), "opencode-zen", fmt.Sprintf("z-%d-%d", os.Getpid(), run), o)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen, _ := c.requests()
-	if !l.Live || !slices.Contains(seen, "GET opencode.ai/zen/v1/models") || !slices.Contains(seen, "GET metadata.test"+path) {
-		t.Fatalf("listing %+v with requests %q, want a live listing and the metadata document", l, seen)
-	}
-}
 
 // A refused key or a listing past its deadline gives the static models
 // with the reason's kind; an unknown provider is an error (0020-MADR D2,
@@ -198,10 +238,8 @@ func TestListFallsBack(t *testing.T) {
 // id, which a later run hands back as its last good listing (0025-MADR D4).
 func TestListSourceAndUsable(t *testing.T) {
 	run := metadataRuns.Add(1)
-	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
-	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing},
-		metadata: {status: http.StatusOK, body: "{}"}})
-	o.ModelMetadataURL = "https://" + metadata
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: openaiListing}})
+	o.ModelData = modelData(t, "{}")
 	before := time.Now()
 	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-src-%d-%d", os.Getpid(), run), o)
 	if err != nil {
@@ -221,10 +259,8 @@ func TestListSourceAndUsable(t *testing.T) {
 // a day is served as a stale listing, with its time (0025-MADR D4).
 func TestListServesLastGood(t *testing.T) {
 	run := metadataRuns.Add(1)
-	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
-	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusServiceUnavailable, body: `{"error":{"message":"busy"}}`},
-		metadata: {status: http.StatusOK, body: "{}"}})
-	o.ModelMetadataURL = "https://" + metadata
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusServiceUnavailable, body: `{"error":{"message":"busy"}}`}})
+	o.ModelData = modelData(t, "{}")
 	o.LastGood, o.LastGoodAt = []string{"gpt-6-luna", "gpt-5-mini"}, time.Now().Add(-time.Hour)
 	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-stale-%d-%d", os.Getpid(), run), o)
 	if err != nil {
@@ -269,12 +305,8 @@ const factDoc = `{"openai":{"id":"openai","models":{
 // 200,000. The id search over the same ids finds neither (0036-MADR D6).
 func TestListingSearchByFacts(t *testing.T) {
 	run := metadataRuns.Add(1)
-	metadata := fmt.Sprintf("metadata.test/%s-%d-%d.json", t.Name(), os.Getpid(), run)
-	_, o := cannedClient(map[string]route{
-		openaiModels: {status: http.StatusOK, body: factModels},
-		metadata:     {status: http.StatusOK, body: factDoc},
-	})
-	o.ModelMetadataURL = "https://" + metadata
+	_, o := cannedClient(map[string]route{openaiModels: {status: http.StatusOK, body: factModels}})
+	o.ModelData = modelData(t, factDoc)
 	l, err := List(t.Context(), "openai", fmt.Sprintf("sk-facts-%d-%d", os.Getpid(), run), o)
 	if err != nil {
 		t.Fatal(err)

@@ -185,7 +185,7 @@ func TestWireSignatureRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := signed("claude", "claude-haiku-5-5")
+	req := assumedLimit(signed("claude", "claude-haiku-5-5"))
 	req.Model = "claude-haiku-5-5"
 	var b strings.Builder
 	for ev, err := range p.Stream(t.Context(), req) {

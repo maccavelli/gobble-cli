@@ -50,9 +50,11 @@ type Options struct {
 	// HTTPClient replaces the provider's client, for tests. Headers, when
 	// set, wraps it.
 	HTTPClient *http.Client
-	// ModelMetadataURL replaces List's model metadata document, for
-	// tests; New never fetches it.
-	ModelMetadataURL string
+	// ModelData is the models.dev document List ranks by and reads its
+	// menu's facts from; nil hands none, and the listing ranks by the SDK's
+	// curated order and name rules. Only List reads it: New and the
+	// lookups do not (0071-MADR P3, P6).
+	ModelData *ModelData
 	// SessionID names the conversation: the routing key a cached request
 	// carries, and OpenCode's and Kilo's session headers (0021-MADR D4).
 	// Empty keeps the SDK's random id, fixed for the provider.
@@ -207,12 +209,12 @@ func withHeaders(c *http.Client, headers func(ctx context.Context, model string)
 }
 
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
-// llm.Provider. Construction makes no network call: model probes and the
-// model metadata fetch are off (0005-MADR).
+// llm.Provider. Construction makes no network call: model probes are off
+// (0005-MADR), and the SDK fetches no model metadata from v1.33.0. New
+// hands the provider no models.dev document (0071-MADR P2, P6).
 func New(id string, o Options) (llm.Provider, error) {
 	opts := []llmprovider.Option{
 		llmprovider.WithModelProbes(false),
-		llmprovider.WithoutModelMetadata(),
 		llmprovider.WithClientInfo(o.ClientName, o.ClientVersion),
 	}
 	if o.APIKey != "" {
@@ -455,8 +457,8 @@ func (a *adapter) attempt(ctx context.Context, req *llm.Request, msgs []llm.Mess
 				h.outcome = outcomeStopped
 				return false
 			}
-			h.stop = stopOf(ev.Response, calls)
-			e = llm.Done{StopReason: h.stop}
+			h.stop, h.limit, h.done = stopOf(ev.Response, calls), sentLimitOf(ev.Response), true
+			e = llm.Done{StopReason: h.stop, OutputLimit: h.limit}
 		}
 		if e != nil && !yield(e, nil) {
 			h.outcome = outcomeStopped
@@ -556,6 +558,16 @@ func stopOf(r *llmprovider.Response, calls bool) llm.StopReason {
 		return llm.StopRefusal // every wire's safety and refusal stops (0005-PLAN F5-3 decision 5)
 	}
 	return llm.StopEndTurn
+}
+
+// sentLimitOf is the output limit r reports the request carried, as llm's,
+// which does not import the SDK; a nil r reports none (0071-MADR P14).
+func sentLimitOf(r *llmprovider.Response) llm.SentLimit {
+	if r == nil {
+		return llm.SentLimit{}
+	}
+	l := r.OutputLimit
+	return llm.SentLimit{Tokens: l.Tokens, Sent: l.Sent, Basis: string(l.Basis), Source: l.Source}
 }
 
 // yieldWarnings yields one llm.Warning for each of the response's warnings.
@@ -900,6 +912,10 @@ func mapErrorAt(id llmprovider.ProviderID, err error, now time.Time) error {
 		if ae.Limit != nil {
 			out.Window = ae.Limit.Window
 		}
+		// The cap the SDK kept from a refusal of the call's limit, which
+		// WithStreamRetry carries to the final error (0071-MADR P15).
+		ob := ae.Observed
+		out.Observed = llm.LimitObservation{Model: ob.Model, BaseURL: ob.BaseURL, Scope: ob.Scope, Tokens: ob.Tokens, Seen: ob.Seen}
 		return out
 	}
 	return wrapped

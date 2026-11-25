@@ -108,6 +108,10 @@ placeholders.
 - cancelled. Mid-genius. Unbelievable.
 - cancelled. Your loss.
 
+## turn.stop.max_tokens_tool
+
+- Even genius hits the output limit: it cut a tool call mid-stride, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
+
 ## lines.hidden
 
 - {n} lines hidden, because you couldn't handle them (--verbose shows all)

@@ -119,7 +119,7 @@ func TestChatServerLists(t *testing.T) {
 	wire := &chatWire{list: `{"data":[{"id":"a"},{"id":"b"}]}`}
 	set, mj := chatSet(t, `{"providers":{"local":{"baseUrl":"http://127.0.0.1:1/v1","models":[{"id":"mine"}]}}}`)
 	l, err := List(t.Context(), "local", "", Options{Set: set, BaseURL: "http://127.0.0.1:1/v1",
-		HTTPClient: &http.Client{Transport: wire}, ModelMetadataURL: "http://127.0.0.1:1/v1/meta.json"})
+		HTTPClient: &http.Client{Transport: wire}})
 	if err != nil {
 		t.Fatal(err)
 	}

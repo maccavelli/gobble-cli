@@ -51,6 +51,9 @@ const (
 	// BasisRefusal is the room or cap a service stated when it refused the
 	// call's first limit.
 	BasisRefusal LimitBasis = "refusal"
+	// BasisNone is a call that carried no output limit, Tokens 0, such as
+	// one on a ChatGPT route (0071-MADR P22, P35).
+	BasisNone LimitBasis = "none"
 )
 
 // OutputLimit is the output limit a call asks for, reasoning included, and

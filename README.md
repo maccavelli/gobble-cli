@@ -175,7 +175,7 @@ The design is [0048-MADR](docs/decisions/0048-MADR-gobble-update-command.md).
 - **CLI:** [Kong](https://github.com/alecthomas/kong) `v1.16.1`.
 - **Protocols:** the [ACP Go SDK](https://github.com/maccavelli/acp-go-sdk2) `acp-go-sdk2` `v1.36.0`, and the
   [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) `v1.8.0`.
-- **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.32.0`, behind
+- **Models:** [go-llmprovider-sdk](https://github.com/maccavelli/go-llmprovider-sdk) `v1.33.0`, behind
   gobble's own `llm` facade. Only `llm/provider` imports it, but for its data-only `authcontract` module, which
   `internal/cli` and `acpserver` may import too.
 - **Tool schemas:** JSON Schema 2020-12 from Go types, with [jsonschema-go](https://github.com/google/jsonschema-go) `v0.4.3`.

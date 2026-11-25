@@ -111,6 +111,9 @@ var todaysText = map[Key]string{
 	PromptEchoRejectProject:    "reject for this project",
 	PromptEchoRejectEverywhere: "reject everywhere",
 	PromptEchoSayWhy:           "reject",
+	// New with 0071-PLAN Phase 2a: 0071-MADR P29's line, 0065-MADR D7's key.
+	TurnStopMaxTokensTool: "The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, " +
+		"or set maxTokens for {model} in models.json.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

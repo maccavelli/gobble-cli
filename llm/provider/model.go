@@ -173,7 +173,7 @@ func toolModels(id string, meta *catalog.Metadata) []string {
 // lookup starts names the application (0051-MADR D9, N6). gobble calls no
 // UseIdentity itself.
 func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace, clientName, clientVersion string, sdk []llmprovider.Option, layers ...catalog.Layer) llm.Model {
-	opts := append([]llmprovider.Option{llmprovider.WithoutModelMetadata()}, sdk...)
+	opts := slices.Clone(sdk)
 	if clientName != "" {
 		opts = append(opts, llmprovider.WithClientInfo(clientName, clientVersion))
 	}

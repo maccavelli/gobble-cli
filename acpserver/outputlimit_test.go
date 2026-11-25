@@ -2,9 +2,12 @@ package acpserver
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
+	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -583,6 +587,25 @@ func TestPromptResponseOutputLimit_0071(t *testing.T) {
 		t.Errorf("a cancelled turn's _meta %s (%v), want %s", got, err, want)
 	}
 	// 0071 new names: end
+	// A call that carried no limit is {0, "none"}, not dropped (0071-MADR
+	// P35); "none" is llm.BasisNone.
+	t.Run("none", func(t *testing.T) {
+		meta, err := turnMeta(&liveSession{queue: newQueue()}, false, llm.OutputLimit{Tokens: 0, Basis: "none"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := jsonx.Marshal(meta)
+		if got, want := string(b), `{"gobble":{"outputLimit":{"tokens":0,"basis":"none"}}}`; err != nil || got != want {
+			t.Errorf("_meta %s (%v), want %s", got, err, want)
+		}
+		// 0071 P2a new names: begin
+		named, err := turnMeta(&liveSession{queue: newQueue()}, false, llm.OutputLimit{Basis: llm.BasisNone})
+		b, err2 := jsonx.Marshal(named)
+		if want := `{"gobble":{"outputLimit":{"tokens":0,"basis":"none"}}}`; err != nil || err2 != nil || string(b) != want {
+			t.Errorf("llm.BasisNone's _meta %s (%v, %v), want %s", b, err, err2, want)
+		}
+		// 0071 P2a new names: end
+	})
 }
 
 // A turn with no model call carries no output limit, and /context keeps
@@ -634,4 +657,197 @@ func TestCapSmallReserve_0071(t *testing.T) {
 		t.Errorf("asked for %d with %d summaries, want the floor 1,024 and no compaction", got, len(h.summaries()))
 	}
 	wantMeta(t, resp, 1024, "window")
+}
+
+// Every model call gobble makes names a limit of at least 1, the turn's, a
+// compaction summary's and the title's alike, the title's with its model's
+// cap unknown included, so go-llmprovider-sdk v1.33.0 refuses none before
+// sending on a Messages route where nothing states the model's limit
+// (0071-MADR P7, F21).
+func TestEveryCallNamesLimit_0071(t *testing.T) {
+	long := func(s string) string { return s + " " + strings.Repeat("x", 400) }
+	t.Run("turn", func(t *testing.T) {
+		h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{}, llmtest.Text("ok"))
+		h.mustPrompt(h.session(), "hello")
+		if got := h.lastCap(); got < 1 {
+			t.Errorf("the turn asked for %d, want a limit", got)
+		}
+	})
+	t.Run("summary", func(t *testing.T) {
+		h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{}, llmtest.Text("r1"), llmtest.Text("r2"), llmtest.Text("SUMMARY"))
+		id := h.session()
+		h.mustPrompt(id, long("one"))
+		h.mustPrompt(id, long("two"))
+		h.mustPrompt(id, "/compact")
+		sums := h.summaries()
+		if len(sums) == 0 {
+			t.Fatal("no summary was asked")
+		}
+		for i, r := range sums {
+			if r.MaxTokens < 1 {
+				t.Errorf("summary %d asked for %d, want a limit", i+1, r.MaxTokens)
+			}
+		}
+	})
+	t.Run("title", func(t *testing.T) {
+		small := llmtest.NewScript(llmtest.Text("A title"))
+		h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("ok")), small, func(o *Options) {
+			o.ModelInfo = func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }
+		})
+		id := newSession(t, h.c, t.TempDir(), nil).SessionId
+		if _, err := prompt(t, h.c, id, "Name this session"); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, func() bool { return h.titled("A title") })
+		if got := small.Requests()[0].MaxTokens; got < 1 {
+			t.Errorf("the title asked for %d with its model's cap unknown, want a limit", got)
+		}
+	})
+}
+
+// agentChunks are the agent message chunks of c's updates, in order.
+func agentChunks(c *acptest.Client) []string {
+	var out []string
+	for _, n := range c.Updates() {
+		if u := n.Update.AgentMessageChunk; u != nil && u.Content.Text != nil {
+			out = append(out, u.Content.Text.Text)
+		}
+	}
+	return out
+}
+
+// toolCutLine is boring's turn.stop.max_tokens_tool for model m1.
+const toolCutLine = "The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, or set " +
+	"maxTokens for m1 in models.json."
+
+// Text, then a call the output limit cut, which the SDK dropped: the turn
+// ends max_tokens with its text, and the agent says why after it; a reply
+// cut while it wrote text, with no call dropped, says nothing more
+// (0071-MADR P29, the owner's "End the turn, keep the text, notify
+// (Recommended)"; 0065-MADR D7, D8).
+func TestCutCallAfterText_0071(t *testing.T) {
+	cut := func(warn bool) llmtest.Turn {
+		evs := []llm.Event{llm.TextDelta{Text: "Let me read it."}}
+		if warn {
+			evs = append(evs, llm.Warning{Kind: "tool_call_cut", Model: "m1", Detail: "the output limit cut call 1 (read)"}) // llm.WarningToolCallCut
+		}
+		return llmtest.Turn{Events: append(evs, llm.Usage{InputTokens: 3, OutputTokens: 2}, llm.Done{StopReason: llm.StopMaxTokens})}
+	}
+	for _, c := range []struct {
+		name string
+		warn bool
+		want []string
+	}{
+		{"cut_call", true, []string{"Let me read it.", "\n\n" + toolCutLine}},
+		{"cut_text", false, []string{"Let me read it."}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": wide(32000)}, cut(c.warn))
+			resp := h.mustPrompt(h.session(), "read it")
+			if resp.StopReason != acp.StopReasonMaxTokens {
+				t.Errorf("stop %q, want max_tokens", resp.StopReason)
+			}
+			if got := agentChunks(h.client); !slices.Equal(got, c.want) {
+				t.Errorf("agent messages %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// messagesWire answers each streamed Messages request with "hello" and
+// records each request's max_tokens; it never dials.
+type messagesWire struct {
+	mu   sync.Mutex
+	caps []float64
+}
+
+func (w *messagesWire) RoundTrip(r *http.Request) (*http.Response, error) {
+	var body map[string]any
+	if r.Body != nil {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(b, &body) //nolint:errcheck // a body that is not JSON records no limit
+	}
+	w.mu.Lock()
+	limit, _ := body["max_tokens"].(float64)
+	w.caps = append(w.caps, limit)
+	w.mu.Unlock()
+	ev := func(name, data string) string { return "event: " + name + "\ndata: " + data + "\n\n" }
+	stream := ev("message_start", `{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","content":[],"usage":{"input_tokens":12,"output_tokens":0}}}`) +
+		ev("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`) +
+		ev("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}`) +
+		ev("content_block_stop", `{"type":"content_block_stop","index":0}`) +
+		ev("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}`) +
+		ev("message_stop", `{"type":"message_stop"}`)
+	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/event-stream"}},
+		Body: io.NopCloser(strings.NewReader(stream)), Request: r}, nil
+}
+
+// A turn on Claude through provider.New, on a canned wire, for a model no
+// source states a limit for: gobble names the limit, so go-llmprovider-sdk
+// v1.33.0 sends the call where it would refuse one that named none (0071-MADR
+// P7, F21; the review's case).
+func TestEveryCallNamesLimitColdClaude_0071(t *testing.T) {
+	w := &messagesWire{}
+	p, err := provider.New("claude", provider.Options{APIKey: "k", Model: "m1", HTTPClient: &http.Client{Transport: w},
+		Retry: &llm.Retry{Off: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &acptest.Client{Allow: true}
+	choice := ModelChoice{Provider: "fake", Models: []string{"m1"}, Default: "m1", Providers: []ProviderChoice{
+		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1"}}}}
+	ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
+		Provider:  func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Models:    func() ModelChoice { return choice },
+		ModelInfo: func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }})
+	c := acptest.Connect(t, ag, client)
+	ag.SetConnection(c.Agent)
+	t.Cleanup(func() {
+		if err := ag.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	initialize(t, c.Client)
+	id := newSession(t, c, t.TempDir(), nil).SessionId
+	if _, err := prompt(t, c, id, "hello"); err != nil {
+		t.Fatalf("the turn failed: %v", err)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.caps) != 1 || w.caps[0] < 1 {
+		t.Fatalf("requests' max_tokens %v, want one request that names a limit", w.caps)
+	}
+}
+
+// Text, then a call the output limit cut, while a follow-up is queued: the
+// turn goes on with the follow-up, and the notice is sent once, after the
+// text and before the follow-up's echo (0071-MADR P36, the owner's "Show the
+// notice anyway (Recommended)").
+func TestCutCallNoticeBeforeQueued_0071(t *testing.T) {
+	cut := llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "Let me read it."},
+		llm.Warning{Kind: "tool_call_cut", Model: "m1", Detail: "the output limit cut call 1 (read)"}, // llm.WarningToolCallCut
+		llm.Usage{InputTokens: 3, OutputTokens: 2}, llm.Done{StopReason: llm.StopMaxTokens}}}
+	h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": wide(32000)}, cut, llmtest.Text("on it"))
+	id := h.session()
+	h.live(id).queue.followUpWith("and then this")
+	resp := h.mustPrompt(id, "read it")
+	if resp.StopReason != acp.StopReasonEndTurn || len(h.calls()) != 2 {
+		t.Fatalf("stop %q after %d calls, want the follow-up's call, then end_turn", resp.StopReason, len(h.calls()))
+	}
+	var order []string
+	for _, n := range h.client.Updates() {
+		switch u := n.Update; {
+		case u.AgentMessageChunk != nil && u.AgentMessageChunk.Content.Text != nil:
+			order = append(order, "agent "+u.AgentMessageChunk.Content.Text.Text)
+		case u.UserMessageChunk != nil && u.UserMessageChunk.Content.Text != nil:
+			order = append(order, "user "+u.UserMessageChunk.Content.Text.Text)
+		}
+	}
+	want := []string{"agent Let me read it.", "agent \n\n" + toolCutLine, "user and then this", "agent on it"}
+	if !slices.Equal(order, want) {
+		t.Errorf("updates %q, want %q", order, want)
+	}
 }

@@ -820,7 +820,7 @@ date's amendments are `accepted` with the rest of the record.)*
 | P26 | A saved cap and another provider | decided | handed only to its own | `TestSavedCapPerProvider_0071` (an opencode-zen cap is not handed to claude) | P26 |
 | P27 | A readable file with a bad entry | decided | the entry dropped; one warning | `TestAgent_UnreadableObservations_0066/bad_entry` | P27; 0066 S13 |
 | P28 | models.json `maxTokens` above a service's cap | decided | the service's cap, basis `service`; one note | `TestTurnCapFromLimits_0071/user_over_observed`, `/user_over_saved` | case 10 |
-| P29 | Text, then a cut call | decided | `max_tokens`, text kept, logged, `turn.stop.max_tokens_tool`; only a cut call: the raw error | `TestCutCallAfterText_0071` (`chat`, `messages`), `TestOnlyCutCall_0071` | case 4 |
+| P29 | Text, then a cut call *(2026-11-25, third: its four lines decided, "Approve all four (Recommended)"; with messages queued, P36)* | decided | `max_tokens`, text kept, logged, `turn.stop.max_tokens_tool`; only a cut call: the raw error | `TestCutCallAfterText_0071` (`chat`, `messages`), `TestOnlyCutCall_0071` | case 4 |
 | P30 | A title cut at its limit | decided | not used | `TestTitleCutDiscarded_0071` | case 5 |
 | P31 | The line's tokens and basis | decided | wire tokens, gobble's basis; another SDK basis raw and logged | `TestContextShowsSentLimit_0071/sdk_basis_raw` | case 7 |
 | P32 | A failed call; a loaded or forked session | decided | "asked", marked; D10's line until a call | `TestContextShowsSentLimit_0071/failed_asked`, `/loaded_session`, `/forked_session` | case 9 |
@@ -829,3 +829,71 @@ date's amendments are `accepted` with the rest of the record.)*
 | P35 | A call with nothing sent, over ACP | decided | `{0, "none"}` in `_meta` and `acpclient` | `TestPromptResponseOutputLimit_0071/none` | P35 |
 
 Counts after this amendment: 83 decided, 7 out of scope, 0 open; 90 rows (P6 and P21 decided; P24 to P35 added).
+
+## Note of 2026-11-25: Phase 2.0's red list, measured
+
+*(2026-11-25, a fact corrected by measurement; no decision changes. The PLAN's execution record holds the run.)* Phase 2.0's
+run at `v1.33.0` (`go test -count=1 ./...` on a scratch clone of `2cbec91` with P2's deletions and P3's seam as stubs) found 24
+tests refused before sending by `limit_rule.go:78-81`, every one on a Claude or OpenCode messages route: ten of the fourteen
+`wireStream` callers "Stale claims corrected" names (`TestWireDeferralGrokCall`, `TestWireLongWaitIsNotAWindow`,
+`TestWireOffline` and `TestWireOverflowSplit` were not red); the tests of the direct `New` sites `record_test.go:381`
+(`TestModelCallSignatureResend`), `replay_test.go:184` and `:206` (`TestWireSignatureRetry`) and `workspace_test.go:18`
+(`TestWireWorkspace`); and eleven tests the scan did not list: `TestWireStatedWindow` and `TestWireBudgetLimit`, through
+`limitErr`, which calls `wireStream`, and nine that build their own request, `TestCacheWire` and `TestSessionIDPerProvider`
+(each counts its requests: 0, want 1), `TestImageWires`, `TestTextOnlyModelImage`, `TestStreamIsLive`,
+`TestFailureAfterFirstDeltaNotRetried`, `TestProviderRetryReported`, `TestWireBaseURL` and `TestWireRejectedKey`.
+`record_test.go:484` (`TestModelCallCache`) is not refused: its request, `callReq()`, names 4,096. P8's
+row decides every one ("a test that Phase 2.0's red run finds refused by `limit_rule.go:78-81`"); the other reds were P4's
+(`TestListingSearchByFacts`, `TestModelsSearchListsFactsFirst`) and P5's (`TestListFullCatalog`, `TestListFetchesMetadata`).
+
+## Amendment of 2026-11-25, third: Phase 2a's review
+
+*(2026-11-25. Additions only. The independent review passed Phase 2a with notes; the owner answered two questions it raised,
+relayed by the coordinator. No row is open.)*
+
+### Owner answers, quoted exactly
+
+| Question | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| The P29 notice's lines in dry, snarky and bombastic, written in Phase 2a beside boring's: are they the decided text? | "Approve all four (Recommended)" | P29 |
+| Text, then a cut call, while steering or follow-up messages are queued: the turn goes on with them (`agent/agent.go:386-403`), so it does not end `max_tokens`; is the notice shown? | "Show the notice anyway (Recommended)" | P36 |
+
+### Decided
+
+* **P29, its lines.** `turn.stop.max_tokens_tool` is, word for word: boring, "The reply hit the output limit while writing a
+  tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json."; dry, "The reply ran out of room
+  in the middle of a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json."; snarky, "Ran
+  out of tokens halfway through a tool call, so that call is gone. Ask again, or set maxTokens for {model} in models.json.";
+  bombastic, "Even genius hits the output limit: it cut a tool call mid-stride, so the call was dropped. Ask again, or set
+  maxTokens for {model} in models.json." Each built-in personality has that one variant.
+* **P36.** When a call ends `max_tokens` with a tool call dropped (P29) and queued steering or follow-up messages carry the
+  turn on, the notice is sent once, as P29's agent message, before the first queued message is shown; the turn then goes on
+  as it does today. A later call's own cut is noticed again.
+
+### Measured: a handed document and Kilo's and Ollama's listings
+
+Phase 2a hands the built-in copy to every listing (P6), Kilo's and Ollama's included, which `v1.32.0` fetched no document
+for (`docs/README.md:240`). Read at go-llmprovider-sdk `v1.33.0`:
+
+* **Ollama:** its menu is built with no document: `listingResult.catalog` calls `ollamaMenu` with `factsOf(…, nil)`
+  (`catalog/discovery.go:547`). A handed document changes nothing.
+* **Kilo:** its band is `kiloCurate` over Kilo's own entries, no document (`discovery.go:723`; the comment above
+  `buildListing`, `:701`). The document reaches only the facts `menuOf` reads (`discovery.go:564`): which models carry a
+  caveat (`menu.go:56`: status, tools, output, retirement) and the newest-first order of the models after the band
+  (`menu.go:78`). In those facts the listing's own fields replace the document's (`lookup.go:206`, `mergeLayers`: models.dev,
+  then the listing), so the document counts only where a Kilo entry states nothing. On the SDK's own 391-model Kilo fixture
+  (`catalog/testdata/ranking-2026-10-12/kilo.json`), every entry states its tools and output; only the five `kilo-auto`
+  routers state no release date, and the copy gives them one, but they rank in the band, not after it. The copy states no
+  retirement and no deprecated status for a Kilo model. A probe on a scratch copy listed that fixture through `provider.List`
+  with the built-in copy and with none: Recommended (276 models) and the menu (285) were identical, and nine models
+  carried caveats in each. So the built-in copy does not change Kilo's or Ollama's listing order. A later document could, for a Kilo
+  model it marks deprecated or retiring: 0072's refreshed copy meets that, not this pin.
+
+### State table: the review
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P29 | *(annotated 2026-11-25, third)* The notice's text in each built-in personality | decided | the four lines above, word for word | `TestBoringIsTodaysText`, `TestToolCutLines_0071` | "Approve all four (Recommended)" |
+| P36 | Text, then a cut call, with steering or follow-up messages queued | decided | the notice once, before the first queued message; the turn goes on | `TestCutCallNoticeBeforeQueued_0071` | "Show the notice anyway (Recommended)" |
+
+Counts after this amendment: 84 decided, 7 out of scope, 0 open; 91 rows (P36 added; P29 annotated).

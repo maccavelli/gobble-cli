@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"fmt"
+	"log/slog"
 	"slices"
 	"testing"
 	"testing/synctest"
@@ -195,5 +196,114 @@ func TestStatedCapHeldForTurn_0071(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+// resultIDs are the ids of the tool results msgs carry.
+func resultIDs(msgs []llm.Message) []string {
+	var out []string
+	for _, m := range msgs {
+		for _, c := range m.Content {
+			if c.Type == llm.ContentToolResult {
+				out = append(out, c.ToolCallID)
+			}
+		}
+	}
+	return out
+}
+
+// A reply the output limit cut after a whole tool call, as the SDK reports
+// it from v1.33.0: the whole call runs, the turn makes its next call, the
+// cut call has no result, and the SDK's tool_call_cut warning is logged once,
+// at Warn (0071-MADR P9; 0065-MADR R24).
+func TestAgentTurn_SalvageCompleteCalls_0065(t *testing.T) {
+	cut := llmtest.Turn{Events: []llm.Event{
+		llm.ToolCallDone{ID: "1", Name: "read", Args: `{"path":"x"}`},
+		llm.Warning{Kind: llm.WarningToolCallCut, Model: "m", Detail: "the output limit cut call 2 (read)"},
+		llm.Usage{InputTokens: 3, OutputTokens: 2},
+		llm.Done{StopReason: llm.StopToolUse},
+	}}
+	s := llmtest.NewScript(cut, llmtest.Text("done"))
+	h := &records{level: slog.LevelDebug}
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Logger: slog.New(h)})
+	_, end, err := collect(t.Context(), t, a, tool.Env{Cwd: t.TempDir()}, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reqs := s.Requests()
+	if len(reqs) != 2 || end.StopReason != agent.StopEndTurn {
+		t.Fatalf("%d calls, stop %q; want the whole call run and a second call", len(reqs), end.StopReason)
+	}
+	if got := resultIDs(reqs[1].Messages); !slices.Equal(got, []string{"1"}) {
+		t.Errorf("the next call carries results %q, want the whole call's alone", got)
+	}
+	if got := h.count(slog.LevelWarn); got != 1 {
+		t.Errorf("%d Warn records, want the warning once", got)
+	}
+}
+
+// Kilo's window form, an overflow from go-llmprovider-sdk v1.33.0: a stated
+// room of at least 1 is one resend at it, with no summary; the input alone
+// past the window is a summary, then the turn sent again (0071-MADR P12,
+// L39, L11; 0065-MADR R20).
+func TestAgentTurn_KiloWindowFormCompacts_0065(t *testing.T) {
+	kilo := func(total int) llmtest.Turn {
+		return refused(fmt.Sprintf("This request exceeds the model's context window of 131072 tokens. "+
+			"Your request contains approximately %d tokens.", total), llm.ErrContextOverflow)
+	}
+	for _, c := range []struct {
+		name  string
+		first llmtest.Turn
+		caps  []int  // each call's limit
+		asks  []bool // the compaction's asks
+	}{
+		// 100,000 of input and the 60,002 asked: a room of 31,072.
+		{"room", kilo(160002), []int{60002, 31072}, []bool{false}},
+		// 200,000 of input alone passes the window.
+		{"over", kilo(260002), []int{60002, 60002}, []bool{false, true}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := llmtest.NewScript(c.first, llmtest.Text("ok"))
+			cp := &compactor{answers: []compactAnswer{{}, {compacted: &agent.Compacted{History: []llm.Message{user("SUMMARY")}, System: "rebuilt"}}}}
+			l := &limiter{}
+			a := agent.New(agent.Config{Provider: s, System: "sys", Compact: cp.compact, OutputLimit: l.limit})
+			if _, _, err := collect(t.Context(), t, a, tool.Env{}, "go"); err != nil {
+				t.Fatalf("the turn failed: %v", err)
+			}
+			if got := sentCaps(s.Requests()); !slices.Equal(got, c.caps) {
+				t.Errorf("caps %v, want %v", got, c.caps)
+			}
+			if !slices.Equal(cp.asks, c.asks) {
+				t.Errorf("compaction asks %v, want %v", cp.asks, c.asks)
+			}
+		})
+	}
+}
+
+// Text, then a call the output limit cut, which the SDK dropped: the turn
+// ends max_tokens with its text kept, runs nothing, and logs the warning
+// once, at Warn (0071-MADR P29, the owner's "End the turn, keep the text,
+// notify (Recommended)").
+func TestCutCallAfterText_0071(t *testing.T) {
+	s := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{
+		llm.TextDelta{Text: "Let me read it."},
+		llm.Warning{Kind: llm.WarningToolCallCut, Model: "m", Detail: "the output limit cut call 1 (read)"},
+		llm.Usage{InputTokens: 3, OutputTokens: 2},
+		llm.Done{StopReason: llm.StopMaxTokens},
+	}})
+	h := &records{level: slog.LevelDebug}
+	a := agent.New(agent.Config{Provider: s, Tools: builtin.Tools(), Logger: slog.New(h)})
+	_, end, err := collect(t.Context(), t, a, tool.Env{Cwd: t.TempDir()}, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.Requests()); n != 1 || end.StopReason != agent.StopMaxTokens {
+		t.Fatalf("%d calls, stop %q; want one call, max_tokens", n, end.StopReason)
+	}
+	if got := texts(end.Messages); !slices.Contains(got, "assistant:Let me read it.") {
+		t.Errorf("the turn's messages %q lack the reply's text", got)
+	}
+	if got := h.count(slog.LevelWarn); got != 1 {
+		t.Errorf("%d Warn records, want the warning once", got)
 	}
 }

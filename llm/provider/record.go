@@ -43,6 +43,8 @@ type health struct {
 	outcome           string
 	err               error
 	stop              llm.StopReason
+	limit             llm.SentLimit // the done response's reported limit
+	done              bool          // the done event arrived
 	usage             llm.Usage
 	used              bool // usage was yielded
 	refused           bool // the request was refused before the SDK
@@ -163,6 +165,14 @@ func (a *adapter) record(ctx context.Context, req *llm.Request, h *health) {
 		}
 	case outcomeDone:
 		attrs = append(attrs, slog.String("stop", string(h.stop)))
+	}
+	if h.done {
+		// What the call carried on the wire, as the SDK reports it; a call
+		// that failed before its done event has none (0071-MADR P16; 0066-MADR
+		// D8 as 0070-MADR D19 places it).
+		l := h.limit
+		attrs = append(attrs, slog.Int("out_limit", l.Tokens), slog.Bool("out_limit_sent", l.Sent),
+			slog.String("out_limit_basis", l.Basis), slog.String("out_limit_source", l.Source))
 	}
 	if u := h.usage; h.used {
 		attrs = append(attrs, slog.Int64("input", u.InputTokens), slog.Int64("output", u.OutputTokens), slog.Int64("reasoning", u.ReasoningTokens),

@@ -195,6 +195,7 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 	var (
 		text  strings.Builder
 		usage llm.Usage
+		stop  llm.StopReason
 	)
 	for ev, err := range p.Stream(ctx, req) {
 		if err != nil {
@@ -205,6 +206,8 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 			text.WriteString(ev.Text)
 		case llm.Usage:
 			usage = ev
+		case llm.Done:
+			stop = ev.StopReason
 		}
 	}
 	// closeTitle waits for this to return before the log closes.
@@ -212,6 +215,12 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 	if err := s.append(write, a.now(), session.Entry{Type: session.TypeUsage, Kind: usageKindTitle, Provider: a.titles.ProviderID,
 		Model: a.titles.Model, Usage: pricedUsage(usage, info)}); err != nil {
 		return err
+	}
+	if stop == llm.StopMaxTokens {
+		// A title cut at its limit is not used, as a cut summary is not; its
+		// usage is written (0071-MADR P30, the owner's "Discard a cut title
+		// (Recommended)").
+		return errors.New("the small model's title was cut at its output limit")
 	}
 	title := cleanTitle(text.String())
 	if title == "" {

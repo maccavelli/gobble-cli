@@ -383,7 +383,7 @@ func TestModelCallSignatureResend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := signed("claude", "claude-haiku-5-5")
+	req := assumedLimit(signed("claude", "claude-haiku-5-5"))
 	req.Model = "claude-haiku-5-5"
 	if err := consume(t.Context(), p, req); err != nil {
 		t.Fatal(err)
@@ -500,15 +500,16 @@ func TestModelCallCache(t *testing.T) {
 	}
 }
 
-// d17 are the record's keys, all of them, less out_limit* until 0066 is
-// built (0070-MADR D17, D18).
+// d17 are the record's keys, all of them, the out_limit fields with
+// go-llmprovider-sdk v1.33.0's report (0070-MADR D17, D18; 0071-MADR P16).
 var d17 = []string{"session", "provider", "model", "background", "buffered", "cut_retry", "limit", "cache", "ttft_ms", "gap_max_ms",
 	"handling_max_ms", "duration_ms", "events", "retries", "retry_kinds", "retry_wait_ms", "server_directed", "resent_without_thinking",
 	"warnings", "delivery", "outcome", "kind", "status", "code", "stop", "input", "output", "reasoning", "cache_read", "cache_write",
-	"estimated", "cache_miss"}
+	"estimated", "cache_miss", "out_limit", "out_limit_sent", "out_limit_basis", "out_limit_source"}
 
 // The record holds D17's keys and nothing else: no text, no error text, no
-// header; no out_limit field yet (0070-MADR D18; T11, T14).
+// header (0070-MADR D18; T11). T14's no_out_limit case is
+// TestModelCallRecordOutLimit_0071 (0071-MADR P16).
 func TestModelCallRecordHoldsNoContent(t *testing.T) {
 	cp := &captured{level: slog.LevelDebug}
 	_ = consume(t.Context(), recordProvider(t, &seqWire{replies: []reply{refused400}}, cp, nil), callReq())                    //nolint:errcheck // the record is the subject
@@ -523,12 +524,29 @@ func TestModelCallRecordHoldsNoContent(t *testing.T) {
 			}
 		}
 	}
-	t.Run("no_out_limit", func(t *testing.T) {
-		for _, r := range cp.calls() {
-			for k := range r.fields {
-				if strings.HasPrefix(k, "out_limit") {
-					t.Errorf("%s present before 0066 is built", k)
-				}
+}
+
+// A call that completes records what it carried on the wire, as the SDK
+// reports it: out_limit, out_limit_sent, out_limit_basis and
+// out_limit_source; a call that fails before its done event records none of
+// them (0071-MADR P16; 0066-MADR D8 as 0070-MADR D19 places it).
+func TestModelCallRecordOutLimit_0071(t *testing.T) {
+	t.Run("completed", func(t *testing.T) {
+		cp := &captured{level: slog.LevelDebug}
+		if err := consume(t.Context(), recordProvider(t, &seqWire{replies: []reply{streamed}}, cp, nil), callReq()); err != nil {
+			t.Fatal(err)
+		}
+		f := oneCall(t, cp).fields
+		if f["out_limit"] != int64(4096) || f["out_limit_sent"] != true || f["out_limit_basis"] != "request" || f["out_limit_source"] != "" {
+			t.Errorf("fields %v, want out_limit 4096, sent, basis request, no source", f)
+		}
+	})
+	t.Run("failed", func(t *testing.T) {
+		cp := &captured{level: slog.LevelDebug}
+		_ = consume(t.Context(), recordProvider(t, &seqWire{replies: []reply{refused400}}, cp, nil), callReq()) //nolint:errcheck // the record is the subject
+		for k := range oneCall(t, cp).fields {
+			if strings.HasPrefix(k, "out_limit") {
+				t.Errorf("%s present on a call that failed before its done event", k)
 			}
 		}
 	})

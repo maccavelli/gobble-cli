@@ -364,3 +364,30 @@ func TestCleanTitle(t *testing.T) {
 		}
 	}
 }
+
+// A title whose call ends at its output limit is not used, as a cut summary
+// is not: its usage is written, the session takes no name, and the failure
+// is logged (0071-MADR P30, the owner's "Discard a cut title
+// (Recommended)").
+func TestTitleCutDiscarded_0071(t *testing.T) {
+	small := llmtest.NewScript(llmtest.Turn{Events: []llm.Event{llm.TextDelta{Text: "A cut ti"},
+		llm.Usage{InputTokens: 10, OutputTokens: 128}, llm.Done{StopReason: llm.StopMaxTokens}}})
+	h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("ok")), small)
+	id := newSession(t, h.c, t.TempDir(), nil).SessionId
+	if _, err := prompt(t, h.c, id, "do the work"); err != nil {
+		t.Fatal(err)
+	}
+	// The title's work has ended once it named the session or logged why not.
+	waitFor(t, func() bool {
+		return h.titled("A cut ti") || strings.Contains(h.logs.String(), "title: the session was not named")
+	})
+	if es := h.usageEntries(id); len(es) != 1 || es[0].Kind != usageKindTitle {
+		t.Errorf("usage entries %+v, want the title's", es)
+	}
+	if h.titled("A cut ti") || mustExt(t, h.c, "_gobble/get_state", map[string]any{"sessionId": id})["sessionName"] != nil {
+		t.Errorf("the session took the cut title; logs %q", h.logs.String())
+	}
+	if !strings.Contains(h.logs.String(), "cut at its output limit") {
+		t.Errorf("logs %q, want the cut named", h.logs.String())
+	}
+}

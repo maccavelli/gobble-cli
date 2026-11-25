@@ -155,7 +155,7 @@ func TestImageWires(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := imageProbeRequest()
+			req := assumedLimit(imageProbeRequest())
 			req.Model = w.model
 			if _, err := drain(t, p, req); err != nil {
 				t.Fatal(err)
@@ -206,7 +206,6 @@ func TestTextOnlyModelImage(t *testing.T) {
 	raw, err := NewSet().registry().New(llmprovider.ProviderClaude,
 		llmprovider.WithAPIKey("k"),
 		llmprovider.WithModel("text-only"),
-		llmprovider.WithoutModelMetadata(),
 		llmprovider.WithModelProbes(false),
 		llmprovider.WithHTTPClient(&http.Client{Transport: c}),
 		catalog.WithModelLayer(textOnlyLayer{}),
@@ -217,7 +216,7 @@ func TestTextOnlyModelImage(t *testing.T) {
 	req := &llm.Request{Model: "text-only", Messages: []llm.Message{{
 		Role: llm.RoleUser, Content: []llm.Content{{Type: llm.ContentImage, MediaType: "image/png", Data: []byte("PNG")}},
 	}}}
-	_, err = drain(t, Wrap(raw), req)
+	_, err = drain(t, Wrap(raw), assumedLimit(req))
 	if !errors.Is(err, llm.ErrUnsupported) {
 		t.Fatalf("err %v, want llm.ErrUnsupported", err)
 	}

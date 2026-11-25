@@ -135,6 +135,7 @@ func wireStream(t *testing.T, id, model string, c *cannedWire, req *llm.Request)
 		t.Fatal(err)
 	}
 	req.Model = model
+	assumedLimit(req)
 	var o wireOutcome
 	for ev, err := range p.Stream(t.Context(), req) {
 		if err != nil {
@@ -157,6 +158,18 @@ func wireStream(t *testing.T, id, model string, c *cannedWire, req *llm.Request)
 
 func wireRequest() *llm.Request {
 	return &llm.Request{Messages: []llm.Message{text(llm.RoleSystem, "be brief"), text(llm.RoleUser, "weather?")}}
+}
+
+// assumedLimit gives req the limit production asks of a model no source
+// states, when req names none, and returns it: go-llmprovider-sdk v1.33.0
+// refuses, before sending, a request on a Messages route (Claude, OpenCode's
+// messages route) that names no limit when nothing states the model's
+// (0071-MADR P8, L5).
+func assumedLimit(req *llm.Request) *llm.Request {
+	if req.MaxTokens == 0 {
+		req.MaxTokens = llm.AssumedMaxTokens
+	}
+	return req
 }
 
 // oneRequest fails the test unless c saw exactly one request.
@@ -301,7 +314,7 @@ func TestWireBaseURL(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req := wireRequest()
+			req := assumedLimit(wireRequest())
 			req.Model = c.model
 			for _, err := range p.Stream(t.Context(), req) {
 				if err != nil {
@@ -433,7 +446,7 @@ func TestWireRejectedKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := drain(t, p, wireRequest()); !errors.Is(err, llm.ErrQuota) || strings.Contains(err.Error(), "rejected the API key") {
+	if _, err := drain(t, p, assumedLimit(wireRequest())); !errors.Is(err, llm.ErrQuota) || strings.Contains(err.Error(), "rejected the API key") {
 		t.Errorf("401 MonthlyLimitError with a source: %v, want llm.ErrQuota that does not say the key was rejected", err)
 	}
 }
