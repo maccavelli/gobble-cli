@@ -112,6 +112,10 @@ precision (0022-MADR D7). Every variant keeps boring's placeholders.
 
 - The reply ran out of room in the middle of a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
 
+## model.limit.user_over
+
+- models.json asks for {asked} output tokens for {model}; the service has stated {stated}, so that is what gobble sends.
+
 ## lines.hidden
 
 - {n} lines omitted for brevity (--verbose shows all)

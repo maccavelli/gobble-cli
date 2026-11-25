@@ -55,8 +55,21 @@ func TestModelInfoModelsJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	full := lookupModelWith(t.Context(), "openai", nil, "full", "", "", "", nil, meta, modelsJSONLayer{mj})
-	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 128000 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
-		t.Errorf("full: %+v, want the override's window and input price over the snapshot's", full)
+	// The output is held to the override's 999 window (0066-MADR D4 as
+	// amended; 0071-MADR P38, "Expect 999, add a wider case (Recommended)").
+	if full.Name != "Full" || full.ContextWindow != 999 || full.MaxTokens != 999 || full.Cost.Input != 9 || full.Cost.Output != 10 || !full.Priced {
+		t.Errorf("full: %+v, want the override's window and input price over the snapshot's, the output held to the window", full)
+	}
+	// wide: a window above the output lets the snapshot's 128,000 through
+	// (0071-MADR P38).
+	wideMJ, _, err := gcatalog.ParseModelsJSON([]byte(`{"providers": {"openai": {"modelOverrides": {"full": {"contextWindow": 999999}}}}}`),
+		SDKVersion(), (*Set)(nil).IDs())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wide := lookupModelWith(t.Context(), "openai", nil, "full", "", "", "", nil, meta, modelsJSONLayer{wideMJ}); wide.ContextWindow != 999999 ||
+		wide.MaxTokens != 128000 {
+		t.Errorf("wide: window %d, output %d; want the override's 999,999 and the snapshot's 128,000", wide.ContextWindow, wide.MaxTokens)
 	}
 	mine := ModelInfo("openai", "", "", nil, "mine", mj)
 	if mine.Name != "mine" || mine.ContextWindow != 128000 || mine.MaxTokens != 16384 || !mine.Priced || mine.Cost.Input != 0 ||

@@ -77,17 +77,66 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 // name it (0051-MADR D9, N6). o's other fields are ignored.
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
+	src, workspace, sdk := lookupSource(ctx, o, id)
+	return modelInfoFrom(ctx, id, src, workspace, model, mj, o.ClientName, o.ClientVersion, sdk...)
+}
+
+// lookupSource is what a lookup of provider id under o reads with: the
+// credential's token source, the stored login's when o has no key and one
+// loads, else o's key's, else nil; the Claude workspace, a key's alone; and
+// the SDK options of o's transport, base URL, cache and set.
+func lookupSource(ctx context.Context, o Options, id string) (llmprovider.TokenSource, string, []llmprovider.Option) {
 	sdk := Options{HTTPClient: o.HTTPClient, Headers: o.Headers, BaseURL: o.BaseURL, Cache: o.Cache, Set: o.Set}.sdkOptions()
 	sdk = append(sdk, Options{BaseURL: o.BaseURL, Set: o.Set}.chatOptions(id)...)
 	login, err := Options{Logins: o.Logins, Sessions: o.Sessions}.login(ctx, id)
 	if err == nil && login != nil && o.APIKey == "" {
-		return modelInfoFrom(ctx, id, login, "", model, mj, o.ClientName, o.ClientVersion, sdk...)
+		return login, "", sdk
 	}
-	var src llmprovider.TokenSource
 	if o.APIKey != "" {
-		src = llmprovider.NewStaticToken(o.APIKey)
+		return llmprovider.NewStaticToken(o.APIKey), o.Workspace, sdk
 	}
-	return modelInfoFrom(ctx, id, src, o.Workspace, model, mj, o.ClientName, o.ClientVersion, sdk...)
+	return nil, o.Workspace, sdk
+}
+
+// limitsSource is the token source a limits read of provider id uses: src;
+// for a provider that takes no key, such as Ollama, with none, the empty
+// static token its provider sends, so that discovery reads the context its
+// server serves and a lookup finds it (0066-MADR S31).
+func limitsSource(id string, src llmprovider.TokenSource) llmprovider.TokenSource {
+	if src == nil && CredentialVar(id) == "" {
+		return llmprovider.NewStaticToken("")
+	}
+	return src
+}
+
+// Discover reads every source of model's limits on provider id, as the SDK's
+// catalog.LookupLimits does, so that a lookup after it, and the provider's
+// own requests, read what the service states (0066-MADR D1, as amended
+// 2026-11-25). It reads with what ModelInfoWith reads with: o's credential,
+// transport, base URL, cache and set, the Claude workspace, gobble's name and
+// version, the embedded snapshot as the "models.dev" layer and models.json
+// above it. It passes no Kilo organization (0066-MADR S43). The SDK bounds
+// it at 10 seconds; ctx ends it sooner. Its error is each source's failure,
+// joined; what the other sources gave is kept either way, and a lookup reads
+// it.
+func Discover(ctx context.Context, o Options, id, model string, mj *gcatalog.ModelsJSON) error {
+	src, workspace, sdk := lookupSource(ctx, o, id)
+	opts := lookupOptions(workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj)...)
+	_, err := catalog.LookupLimits(ctx, llmprovider.ProviderID(id), limitsSource(id, src), model, opts...)
+	return err
+}
+
+// lookupLayers are a lookup's layers: the embedded snapshot, when it
+// parsed, then models.json, when mj is not nil, which ranks above it.
+func lookupLayers(mj *gcatalog.ModelsJSON) []catalog.Layer {
+	var layers []catalog.Layer
+	if meta, err := snapshot(); err == nil {
+		layers = append(layers, *meta)
+	}
+	if mj != nil {
+		layers = append(layers, modelsJSONLayer{mj})
+	}
+	return layers
 }
 
 // ModelInfoContext is ModelInfo for a caller with a context, which bounds
@@ -105,14 +154,10 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 // (clientName empty names none), and sdk, the SDK options a listing it starts
 // takes (0046-MADR D7).
 func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, sdk ...llmprovider.Option) llm.Model {
-	var layers []catalog.Layer
-	if meta, err := snapshot(); err == nil {
-		layers = append(layers, *meta)
-	}
+	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, lookupLayers(mj)...)
 	if mj == nil {
-		return capSourced(lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, layers...), gcatalog.Facts{})
+		return capSourced(m, gcatalog.Facts{})
 	}
-	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, append(layers, modelsJSONLayer{mj})...)
 	f, ok := mj.Facts(id, model)
 	if ok && len(f.LevelMap) > 0 {
 		m.LevelMap = map[string]bool{}
@@ -123,20 +168,69 @@ func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, 
 	return capSourced(m, f)
 }
 
-// capSourced is m with the source of its output cap (0071-MADR D1):
-// models.json's maxTokens is the user's; Pi's default for a model it defines
-// without one is assumed; any other known cap is the catalog's. An unknown
-// cap is left unsourced, for llm.FitOutput to assume.
+// The sources of a limit, as the SDK names its layers (0071-MADR P17, P28):
+// models.json's layer, and the layer of the caps services stated on earlier
+// runs.
+const (
+	sourceModelsJSON    = "models.json"
+	sourceServiceStated = "service-stated"
+)
+
+// capSourced is m with the source of its streamed output cap, the cap a turn
+// asks for (0071-MADR D1, P17, P28): models.json's maxTokens, when it states
+// one and its value is chosen or a service's stated cap held it, is the
+// user's; Pi's default for a model models.json defines without one is
+// assumed; any other known cap is the catalog's. An unknown cap is left
+// unsourced, for llm.FitOutput to assume. A models.json maxTokens the SDK
+// chose over a cap a service stated on an earlier run, ranked below it, is
+// first held to that cap, as a cap a service stated in this process already
+// holds it.
 func capSourced(m llm.Model, f gcatalog.Facts) llm.Model {
+	stated := f.MaxTokens != nil && f.MaxTokensStated
+	if stated {
+		m.Limits.Output = heldToServiceStated(m.Limits.Output)
+		m.Limits.StreamedOutput = heldToServiceStated(m.Limits.StreamedOutput)
+		m.MaxTokens = m.Limits.Output.Tokens
+	}
+	out := m.Limits.StreamedOutput
 	switch {
-	case f.MaxTokens != nil && f.MaxTokensStated:
+	case !out.Known:
+		m.MaxTokensFrom = ""
+	case stated && (out.Source == sourceModelsJSON || statedAbove(out, sourceModelsJSON)):
 		m.MaxTokensFrom = llm.CapUser
-	case f.MaxTokens != nil:
+	case f.MaxTokens != nil && out.Source == sourceModelsJSON:
 		m.MaxTokensFrom = llm.CapAssumed
-	case m.MaxTokens > 0:
+	default:
 		m.MaxTokensFrom = llm.CapCatalog
 	}
 	return m
+}
+
+// statedAbove reports whether source states more than f's chosen value.
+func statedAbove(f llm.LimitFact, source string) bool {
+	return slices.ContainsFunc(f.Others, func(o llm.LimitFact) bool { return o.Source == source && o.Tokens > f.Tokens })
+}
+
+// heldToServiceStated is f, chosen from models.json, held to the smallest cap
+// the "service-stated" layer states below it, which then leads its evidence
+// (0071-MADR P28).
+func heldToServiceStated(f llm.LimitFact) llm.LimitFact {
+	if !f.Known || f.Source != sourceModelsJSON {
+		return f
+	}
+	best := -1
+	for i, o := range f.Others {
+		if o.Source == sourceServiceStated && o.Tokens > 0 && o.Tokens < f.Tokens && (best < 0 || o.Tokens < f.Others[best].Tokens) {
+			best = i
+		}
+	}
+	if best < 0 {
+		return f
+	}
+	chosen := f.Others[best]
+	others := append([]llm.LimitFact{{Tokens: f.Tokens, Known: true, Source: f.Source, Stale: f.Stale}},
+		slices.Delete(slices.Clone(f.Others), best, best+1)...)
+	return llm.LimitFact{Tokens: chosen.Tokens, Known: true, Conflicting: true, Source: chosen.Source, Stale: chosen.Stale, Others: others}
 }
 
 // KnownModels are the models gobble knows of provider id with no request:
@@ -173,6 +267,20 @@ func toolModels(id string, meta *catalog.Metadata) []string {
 // lookup starts names the application (0051-MADR D9, N6). gobble calls no
 // UseIdentity itself.
 func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource, model, workspace, clientName, clientVersion string, sdk []llmprovider.Option, layers ...catalog.Layer) llm.Model {
+	opts := lookupOptions(workspace, clientName, clientVersion, sdk, layers...)
+	info, _ := catalog.CachedModel(ctx, llmprovider.ProviderID(id), src, model, opts...)
+	// The limits read the cached listing by the same credential and client
+	// info, so they find what the lookup's listing stored (0071-MADR P33).
+	if ls := limitsSource(id, src); ls != nil {
+		opts = append(opts, llmprovider.WithTokenSource(ls))
+	}
+	return withLimits(modelOf(id, model, info), catalog.CachedLimits(ctx, llmprovider.ProviderID(id), model, opts...))
+}
+
+// lookupOptions are a lookup's SDK options: sdk, then gobble's name and
+// version when clientName is set, a Claude key's workspace, and layers, the
+// later ranking above the earlier.
+func lookupOptions(workspace, clientName, clientVersion string, sdk []llmprovider.Option, layers ...catalog.Layer) []llmprovider.Option {
 	opts := slices.Clone(sdk)
 	if clientName != "" {
 		opts = append(opts, llmprovider.WithClientInfo(clientName, clientVersion))
@@ -183,8 +291,37 @@ func lookupModelWith(ctx context.Context, id string, src llmprovider.TokenSource
 	for _, l := range layers {
 		opts = append(opts, catalog.WithModelLayer(l))
 	}
-	info, _ := catalog.CachedModel(ctx, llmprovider.ProviderID(id), src, model, opts...)
-	return modelOf(id, model, info)
+	return opts
+}
+
+// withLimits is m with the SDK's limits l, each with its source: MaxTokens is
+// the output's chosen value, ContextWindow the window's, else the input
+// limit's, 0 for unknown (0066-MADR D4, D9).
+func withLimits(m llm.Model, l catalog.Limits) llm.Model {
+	m.Limits = llm.Limits{Output: factOf(l.Output), StreamedOutput: factOf(l.StreamedOutput), Window: factOf(l.Window),
+		Input: factOf(l.Input), Required: l.Required}
+	m.MaxTokens, m.ContextWindow = m.Limits.Output.Tokens, 0
+	switch {
+	case m.Limits.Window.Known:
+		m.ContextWindow = m.Limits.Window.Tokens
+	case m.Limits.Input.Known:
+		m.ContextWindow = m.Limits.Input.Tokens
+	}
+	return m
+}
+
+// factOf is the SDK's fact f as llm's: the chosen evidence's source and
+// staleness, and every other statement in Others.
+func factOf(f catalog.Fact) llm.LimitFact {
+	out := llm.LimitFact{Tokens: f.Tokens, Known: f.Known, Conflicting: f.Conflicting}
+	ev := f.Evidence
+	if f.Known && len(ev) > 0 {
+		out.Source, out.Stale, ev = ev[0].Source, ev[0].Stale, ev[1:]
+	}
+	for _, e := range ev {
+		out.Others = append(out.Others, llm.LimitFact{Tokens: e.Tokens, Known: e.Tokens > 0, Source: e.Source, Stale: e.Stale})
+	}
+	return out
 }
 
 // modelsJSONLayer is models.json as an SDK layer: each fact it gives is

@@ -897,3 +897,130 @@ for (`docs/README.md:240`). Read at go-llmprovider-sdk `v1.33.0`:
 | P36 | Text, then a cut call, with steering or follow-up messages queued | decided | the notice once, before the first queued message; the turn goes on | `TestCutCallNoticeBeforeQueued_0071` | "Show the notice anyway (Recommended)" |
 
 Counts after this amendment: 84 decided, 7 out of scope, 0 open; 91 rows (P36 added; P29 annotated).
+
+## Amendment of 2026-11-25, fourth: Phase 2b's stop
+
+*(2026-11-25. Additions only. Phase 2b's first pass stopped on five cases (0071-PLAN, "Phase 2b, pass 1"); the owner answered
+three, relayed by the coordinator; the coordinator closed two. No row is open.)*
+
+### Owner answers, quoted exactly
+
+| Question | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| Q-A. Discovery at a session's start and model switch needs a hook from `internal/cli` into `acpserver`, a name P23 does not list | "Add Options.Discover (Recommended)" | P23, P37 |
+| Q-B. `TestModelInfoModelsJSON`'s `full` case: models.json's 999 window holds the snapshot's 128,000 output to 999 under D4 as amended | "Expect 999, add a wider case (Recommended)" | P38 |
+| Q-D. `model.limit.user_over`'s lines in dry, snarky and bombastic, written in Phase 2b | "Approve as written" | P39 |
+
+Closed by the coordinator: Q-C (the task brief listed P24 to P27 and P34 for 2b; the PLAN's split stands, and they are 2c's);
+Q-E (`TestDiscover_KiloNoOrganization_0066` is S43's test, a dated note in 0066).
+
+### Decided
+
+* **P23, re-pointed.** Added: `acpserver.Options.Discover func(ctx context.Context, provider, model string) error`.
+* **P37.** `acpserver` starts `Options.Discover` in the background, with a context the session's close cancels, when a session's
+  model is set (new, loaded or resumed), for its title model too, and on a model switch; a thinking-only change starts none.
+  The session's next call waits for it (a cancel ends the wait with the turn); a failure is logged at debug and the call goes on.
+  `internal/cli` wires it to `provider.Discover` with the run's options and models.json. Nil discovers nothing (0066 D1, D2).
+* **P38.** `TestModelInfoModelsJSON`'s `full` case expects `MaxTokens` 999, the output held to the 999 window (S35); a new case,
+  `wide`, whose models.json window is above the snapshot's output, expects the output's 128,000 to pass through.
+* **P39.** The three lines are decided text, each pinned by `TestUserOverLines_0071`, word for word:
+  dry, "models.json asks for {asked} output tokens for {model}; the service has stated {stated}, so that is what gobble sends.";
+  snarky, "models.json wants {asked} output tokens for {model}; the service says {stated}, so {stated} it is.";
+  bombastic, "models.json demands {asked} output tokens for {model}, but the service decrees {stated}, so gobble sends {stated}."
+
+### State table: Phase 2b's stop
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P37 | A session's model set or switched; its first call | decided | `Options.Discover` started, the next call waits; cancel and close end it | 0066's `TestSession_*_0066`, `TestSetConfig_SwitchDiscovers_0066` | "Add Options.Discover (Recommended)" |
+| P38 | models.json's window below the snapshot's output, and above it | decided | 999 held; 128,000 passed through | `TestModelInfoModelsJSON` (`full`, `wide`) | "Expect 999, add a wider case (Recommended)" |
+| P39 | `model.limit.user_over` in dry, snarky and bombastic | decided | the three lines above | `TestUserOverLines_0071` | "Approve as written" |
+
+Counts after this amendment: 87 decided, 7 out of scope, 0 open; 94 rows (P37 to P39 added).
+
+## Amendment of 2026-11-25, fifth: Phase 2b's review
+
+*(2026-11-25. Additions only. The independent review of Phase 2b found one bug and several gaps, closed in Phase 2b's first
+pass, continuing, inside 0066-MADR D1, S8 and S40 as they stand; it raised one question, which the owner answered, relayed by
+the coordinator. No row is open.)*
+
+### Owner answer, quoted exactly
+
+| Question | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| A session starts discovery for its model and its title model at once; does each call wait for both, or for its own model's? | "Each call waits for its own model (Recommended)" | P40 |
+
+### Decided
+
+* **P40.** Each call waits only for its own model's discovery: a turn (and `/compact`, which calls the session's model) for the
+  session's model; the title call for the title model's, in the background, bounded as every discovery is, so the user never
+  waits on it.
+* **Within 0066 D1, S8 and S40, as built** (no decision changes): `/compact` and `_gobble/compact` as a session's first request
+  wait as its first turn does; a turn cancelled while it waits ends cancelled with no limit computed, none recorded and no P28
+  note marked; P28's note is marked as said when it is sent; `acpserver` bounds every `Options.Discover` at 10 seconds itself,
+  whatever the hook does with its context; the session's close, and `Agent.Close`, wait for its discoveries to end, up to the
+  wait a close gives a title (0046-MADR D1).
+
+### State table: Phase 2b's review
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| P40 | A session's model and title model discovered at its start; its turn and its title call | decided | each waits for its own model's discovery alone; the title's in the background, bounded | `TestEachCallWaitsForItsModel_0071` (`turn`, `title`) | "Each call waits for its own model (Recommended)" |
+
+Counts after this amendment: 88 decided, 7 out of scope, 0 open; 95 rows (P40 added).
+
+## Amendment of 2026-11-25, sixth: a first prompt's attached images
+
+*(2026-11-25. Additions only. The delta check of Phase 2b found that `Prompt` decides whether a prompt's `@path` images are
+sent (`acpserver/agent.go:761`, `promptAttachments(…, takesImages(…), …)`) from the model's facts before the first call's
+discovery wait. The owner ruled, relayed by the coordinator. One row stays open (P42), so this amendment is proposed, and no
+code it governs is built, until P42 is decided; the record's earlier rows stand as accepted.)*
+
+*(2026-11-25, later: the owner answered P42, relayed by the coordinator, "Go back to 'keep as built'". P41 is struck, P42 is
+decided below, and no row is open: the amendment is accepted with the record, whose status stays `accepted`. No code changes;
+the code is as built.)*
+
+### Owner answer, quoted exactly
+
+| Question | The owner's answer | Rows |
+| :--- | :--- | :--- |
+| A first prompt's attached images are judged from the facts before discovery: re-judge them after the wait, or write the prompt after it? | "Save first, re-judge images after" | ~~P41~~, P42 |
+| P42 (2026-11-25): what the saved entry holds when the re-judgement differs (three options: a branch entry, a gobble entry, or the request alone with an exception to 0037-MADR D42) | "Go back to 'keep as built'" | P41 struck, P42 |
+
+### Decided
+
+* ~~**P41.** A session's first prompt is written to the session as today, its attached images judged from the facts before the
+  wait. After the wait, before the first model call, gobble judges each attached image again from the facts discovery filled
+  in: sent as image content, or left as typed (0036-MADR D8). A prompt cancelled during the wait leaves exactly what 0066-MADR
+  S40 decides, as built (`cancelledWaiting`): the prompt as saved joins the live history as a cancelled turn's does, with no
+  limit computed, recorded or noted, and no re-judgement.~~ *(2026-11-25: struck by the owner's "Go back to 'keep as built'".)*
+* **P42, decided (2026-11-25, "Go back to 'keep as built'").** In a session's first prompt, attached `@path` images are judged
+  from the facts gobble has before discovery, as built (`acpserver/agent.go:761`; 0036-MADR D8); the built-in copy covers the
+  models it knows. Nothing is judged again after discovery, so the saved entry, the live history, `session/load` and 0037-MADR
+  D42 are as they were. A prompt cancelled during the wait leaves what 0066-MADR S40 decides, unchanged.
+* **Follow-up for 0072.** The gap is a model the built-in copy does not know, or knows without its image input, whose
+  discovery would show image input: its first prompt's attached images are left as typed. 0072's refreshed built-in copy
+  narrows it.
+
+### Open *(2026-11-25: none now; P42, below, was open until the owner's answer above)*
+
+* **P42. What the saved entry holds when the re-judgement differs from what was saved.** Three constraints bind it: the
+  session file is append-only (`session.Log` has `Append` alone, `session/session.go:421-426`, as Pi's files are); 0037-MADR
+  D42, every request carries every earlier request's messages as a byte prefix, live or reloaded, with only four intended
+  changes of prefix, none of them this; and `session/load` replays what the file holds. No option meets all three without a
+  decision no record makes:
+  * rewriting the entry needs a rewrite on `session.Log` (an exported interface) and breaks the file's append-only form;
+  * the request alone taking the re-judged form, the entry and the live history keeping what was saved, keeps the file and
+    `session/load` as they are but breaks D42: the first turn's calls carry a user message the second turn's do not;
+  * keeping D42 means the live history holds the re-judged form, so the file must say it too, by an entry no record decides
+    (a branch, or a gobble entry).
+
+### State table: a first prompt's attached images
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| ~~P41~~ | ~~A first prompt with an `@path` image, the facts before discovery and after it differing; cancelled while it waits~~ | ~~decided~~ struck 2026-11-25 | ~~saved as judged before the wait; judged again after it, before the first call; a cancel leaves what S40 decides~~ | — | ~~"Save first, re-judge images after"~~; struck by "Go back to 'keep as built'" |
+| P42 | ~~The re-judgement differs from the saved entry~~ A first prompt's `@path` image, the facts before discovery and after it differing | ~~open~~ decided 2026-11-25 | ~~three options, for the owner~~ judged from the facts before discovery, as built; not judged again; S40 unchanged; follow-up for 0072 | `TestMentionImage` (`vision`, `text-only`: the judgement from the facts the call reads), `TestSession_CancelAndCloseWhileWaiting_0066/cancel` (S40) | "Go back to 'keep as built'" |
+
+Counts after this amendment: 89 decided, 7 out of scope, 1 open; 97 rows (P41, P42 added).
+*(2026-11-25, after the owner's answer: 89 decided, 7 out of scope, 0 open; 97 rows, P41 struck.)*

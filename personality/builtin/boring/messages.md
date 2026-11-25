@@ -57,6 +57,10 @@ cancelled
 
 The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
 
+## model.limit.user_over
+
+models.json asks for {asked} output tokens for {model}; the service stated {stated}, which gobble sends.
+
 ## lines.hidden
 
 {n} lines hidden (--verbose shows all)

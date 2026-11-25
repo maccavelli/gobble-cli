@@ -93,6 +93,9 @@ Every turn and every compaction summary names an output limit, reasoning include
   you set it, with no ceiling.
 - **A model no source gives a cap for** asks for 16,384, shown as assumed; a `models` entry without
   `maxTokens` takes the same 16,384.
+- **A cap the service stated** for the model, when it refused a larger limit earlier in the run,
+  holds what gobble asks, a `maxTokens` you set above it included: gobble sends the service's cap,
+  shown as the service's, and says so once per session and model.
 - **Each call is held to the room the window leaves:** the window, less gobble's estimate of the
   context, less 4,096 tokens. With less room than 1,024, it asks for 1,024, or for the cap when the
   cap is smaller, so a cap below 1,024 is sent as it is; with no room, it sends the cap, so the

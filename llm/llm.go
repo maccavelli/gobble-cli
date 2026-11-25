@@ -187,6 +187,50 @@ type Model struct {
 	// Cost is the model's price, when Priced.
 	Cost   ModelCost `json:"cost,omitzero"`
 	Priced bool      `json:"-"`
+	// Limits are the model's limits with each one's source, as
+	// go-llmprovider-sdk's catalog reads them; MaxTokens is Limits.Output's
+	// chosen value and ContextWindow Limits.Window's, else Limits.Input's
+	// (0066-MADR D4, as amended 2026-11-25; 0071-MADR P17). Zero when the
+	// catalog was not read for them.
+	Limits Limits `json:"-"`
+}
+
+// Limits are one model's limits on one provider, each with its source
+// (0066-MADR D4; 0071-MADR P17).
+type Limits struct {
+	// Output is the most a call's output-limit field may carry.
+	Output LimitFact
+	// StreamedOutput is Output for a streamed call, which may differ when a
+	// service stated another cap for one; gobble streams, so a turn reads
+	// it.
+	StreamedOutput LimitFact
+	// Window is input plus output; Input the input limit where a source
+	// states it apart from the window (Claude, Gemini).
+	Window LimitFact
+	Input  LimitFact
+	// Required reports whether the model's wire requires an output limit.
+	Required bool
+}
+
+// LimitFact is one limit: the chosen value and its source, and each other
+// source's statement in Others, by rank (0066-MADR D4).
+type LimitFact struct {
+	// Tokens is the chosen value; 0 when not Known.
+	Tokens int
+	// Known reports whether a source states the limit.
+	Known bool
+	// Conflicting reports that two sources state different values, or that
+	// the output was held to the window or to a cap a service stated.
+	Conflicting bool
+	// Source names the chosen value's source, as the SDK names it, such as
+	// "listing:claude", "models.json" or "models.dev".
+	Source string
+	// Stale reports that the source was read longer ago than its
+	// freshness.
+	Stale bool
+	// Others are the other sources that state the limit, each as a fact of
+	// its own with no Others.
+	Others []LimitFact
 }
 
 // ModelCost is a model's price, in USD per million tokens: its base rates,

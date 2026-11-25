@@ -112,6 +112,10 @@ placeholders.
 
 - Even genius hits the output limit: it cut a tool call mid-stride, so the call was dropped. Ask again, or set maxTokens for {model} in models.json.
 
+## model.limit.user_over
+
+- models.json demands {asked} output tokens for {model}, but the service decrees {stated}, so gobble sends {stated}.
+
 ## lines.hidden
 
 - {n} lines hidden, because you couldn't handle them (--verbose shows all)

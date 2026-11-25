@@ -109,6 +109,19 @@ type Options struct {
 	// window and price (0005-PLAN F4-2a). Nil knows nothing, so every model
 	// offers off to xhigh, with no window and no price.
 	ModelInfo func(provider, model string) llm.Model
+	// Discover reads every source of a provider's model's limits, so that
+	// ModelInfo then reads what the service states. It is started in the
+	// background, with a context the session's close cancels, when a
+	// session's model is set (new, loaded or resumed, its title model too)
+	// and on a model switch; each call waits for its own model's: a turn,
+	// /compact and _gobble/compact for the session's model, the title in
+	// the background for the title model's; a cancel ends that wait with
+	// the call. Its context ends after 10 seconds, and a call waits no
+	// longer whether it returns or not; a close waits for it to return, up
+	// to the wait a close gives a title. It may be called concurrently, for
+	// several sessions and models. Its error is logged at debug. Nil
+	// discovers nothing (0066-MADR D1, D2, S8, S40; 0071-MADR P37, P40).
+	Discover func(ctx context.Context, provider, model string) error
 	// Override is the run's own model and thinking level, which win over
 	// every session's, new, forked, loaded or resumed (0005-PLAN F4-2c).
 	// Zero leaves each session its own.
@@ -183,6 +196,7 @@ type Agent struct {
 	credGen     func(id string) uint64
 	planConsent func(id string) (ConsentState, error)
 	info        func(provider, model string) llm.Model
+	discover    func(ctx context.Context, provider, model string) error
 	override    Override
 	tools       []tool.Tool
 	noGrants    bool
@@ -257,7 +271,14 @@ type liveSession struct {
 	// outLimit is the output limit the session's last model call asked for,
 	// under the agent's mu; zero before its first (0071-MADR D4, D10).
 	outLimit llm.OutputLimit
-	queue    *queue
+	// userOver are the provider/model refs whose models.json maxTokens a
+	// service's stated cap held, already said, under the agent's mu
+	// (0071-MADR P28).
+	userOver map[string]bool
+	// disc is the session's discovery of its models' limits (0071-MADR
+	// P37).
+	disc  discovery
+	queue *queue
 	// compaction is /compact's settings, from the session's settings.
 	compaction compaction.Settings
 	// retry is the session's retry settings; retryAbort, while a turn
@@ -356,6 +377,7 @@ func (s *liveSession) warningLog() *agent.WarningLog {
 // the first request, so it can send session updates.
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
+		discover:      opts.Discover,
 		rememberModel: opts.Remember, saveRefusal: opts.SaveRefusal, search: opts.SearchModels, credGen: opts.CredentialGeneration,
 		planConsent: opts.PlanConsent,
 		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
@@ -402,6 +424,7 @@ func (a *Agent) Close() error {
 	a.mu.Unlock()
 	var errs []error
 	for _, s := range sessions {
+		a.endDiscovery(s)
 		a.closeMCP(s.mcp)
 		a.closeTitle(s)
 		errs = append(errs, s.log.Close())
@@ -560,9 +583,14 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		}
 	}
 	s.mcp = a.startMCP(ctx, s.cwd, servers, notes, ss)
+	// The model and provider discovery starts for are read before the
+	// session is published, while no other request can reach it
+	// (0071-PLAN Phase 2b's review, R5).
+	startModel, startProvider := s.model, a.provOf(s)
 	a.mu.Lock()
 	a.sessions[s.id] = s
 	a.mu.Unlock()
+	a.discoverModels(ctx, s, startProvider, startModel, true)
 	a.mu.Lock()
 	conn := a.conn
 	a.mu.Unlock()
@@ -814,6 +842,13 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	out := newUpdates(ctx, conn, p.SessionId)
 	auto.out = out
 	a.sendNotices(out, s) // the start-up and MCP diagnostics, as notices (0016-MADR D8)
+	// The first call waits for its model's discovery (0066-MADR D1;
+	// 0071-MADR P40), before the turn reads its model's facts, image input
+	// included; cancelled meanwhile, the turn ends before any call.
+	a.waitDiscovery(turnCtx, s, w.provider, chosen)
+	if turnCtx.Err() != nil {
+		return a.cancelledWaiting(s, w.provider, w.model, prompt)
+	}
 	var last llm.Usage
 	env := s.env()
 	env.Images = takesImages(a.info(w.provider, chosen), model)
@@ -853,6 +888,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 			a.replayFile(s) // the file holds the entries written before the failed one
 			return acp.PromptResponse{}, appendFailed(w.err)
 		}
+		limits.sayNote(out)
 		if r, ok := ev.(agent.Retry); ok {
 			a.mu.Lock()
 			s.waiting = r.Phase == agent.RetryStart
@@ -887,6 +923,18 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 		}
 	}
 	return withTurnMeta(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled}, true, limits.last)
+}
+
+// cancelledWaiting ends a turn cancelled while its first call waited for
+// discovery: the prompt, already written, joins the live history as a
+// cancelled turn's does, and no limit was computed, recorded or noted
+// (0066-MADR S40; 0071-PLAN Phase 2b's review).
+func (a *Agent) cancelledWaiting(s *liveSession, provider, model string, prompt llm.Message) (acp.PromptResponse, error) {
+	msgs := stamped([]llm.Message{prompt}, llm.Origin{Provider: provider, Model: model}, true)
+	a.mu.Lock()
+	s.history = append(s.history, msgs...)
+	a.mu.Unlock()
+	return withTurnMeta(s, acp.PromptResponse{StopReason: acp.StopReasonCancelled}, true, llm.OutputLimit{})
 }
 
 // claimTurn makes the caller's work the session's one running turn, or
@@ -1298,6 +1346,8 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 	a.mu.Lock()
 	a.sessions[id] = s
 	a.mu.Unlock()
+	model, _ := a.choices(s)
+	a.discoverModels(ctx, s, a.provOf(s), model, true)
 	return s, nil
 }
 
@@ -1522,6 +1572,7 @@ func (a *Agent) CloseSession(ctx context.Context, p acp.CloseSessionRequest) (ac
 		}
 		t.Stop()
 	}
+	a.endDiscovery(s)
 	a.closeMCP(s.mcp)
 	a.closeTitle(s)
 	if err := s.log.Close(); err != nil {

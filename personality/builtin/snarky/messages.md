@@ -112,6 +112,10 @@ placeholders.
 
 - Ran out of tokens halfway through a tool call, so that call is gone. Ask again, or set maxTokens for {model} in models.json.
 
+## model.limit.user_over
+
+- models.json wants {asked} output tokens for {model}; the service says {stated}, so {stated} it is.
+
 ## lines.hidden
 
 - {n} lines hidden. You're welcome. (--verbose shows all)

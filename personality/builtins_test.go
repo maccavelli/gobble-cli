@@ -239,3 +239,23 @@ func TestToolCutLines_0071(t *testing.T) {
 		}
 	}
 }
+
+// userOverLines are model.limit.user_over's decided lines, by built-in
+// personality (0071-MADR P28, P39, "Approve as written").
+var userOverLines = map[string]string{
+	Boring:    "models.json asks for {asked} output tokens for {model}; the service stated {stated}, which gobble sends.",
+	Dry:       "models.json asks for {asked} output tokens for {model}; the service has stated {stated}, so that is what gobble sends.",
+	Snarky:    "models.json wants {asked} output tokens for {model}; the service says {stated}, so {stated} it is.",
+	Bombastic: "models.json demands {asked} output tokens for {model}, but the service decrees {stated}, so gobble sends {stated}.",
+}
+
+// Each built-in personality says model.limit.user_over in its one decided
+// line, word for word (0071-MADR P39).
+func TestUserOverLines_0071(t *testing.T) {
+	for _, name := range Builtins {
+		got := builtins()[name].catalog.Variants(ModelLimitUserOver)
+		if want := userOverLines[name]; len(got) != 1 || got[0] != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+}

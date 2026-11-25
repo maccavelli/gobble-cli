@@ -114,6 +114,8 @@ var todaysText = map[Key]string{
 	// New with 0071-PLAN Phase 2a: 0071-MADR P29's line, 0065-MADR D7's key.
 	TurnStopMaxTokensTool: "The reply hit the output limit while writing a tool call, so the call was dropped. Ask again, " +
 		"or set maxTokens for {model} in models.json.",
+	// New with 0071-PLAN Phase 2b: 0071-MADR P28's line.
+	ModelLimitUserOver: "models.json asks for {asked} output tokens for {model}; the service stated {stated}, which gobble sends.",
 }
 
 // The boring catalog holds today's text, word for word, for every key.

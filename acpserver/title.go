@@ -183,6 +183,9 @@ func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry,
 	if err != nil {
 		return err
 	}
+	// The title waits for the title model's discovery, here in its own
+	// goroutine, bounded (0071-MADR P40).
+	a.waitDiscovery(ctx, s, a.titles.ProviderID, a.titles.Model)
 	info := a.info(a.titles.ProviderID, a.titles.Model)
 	maxTokens := titleMaxTokens
 	if info.MaxTokens > 0 {

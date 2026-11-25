@@ -24,7 +24,11 @@ const (
 	// the output limit cut while it wrote a tool call, which was dropped
 	// (0065-MADR D7; 0071-MADR P29).
 	TurnStopMaxTokensTool Key = "turn.stop.max_tokens_tool"
-	LinesHidden           Key = "lines.hidden"
+	// ModelLimitUserOver is the agent's message when models.json asks for
+	// more output tokens than a cap the service stated, which gobble sends
+	// (0071-MADR P28; 0066-MADR D10).
+	ModelLimitUserOver Key = "model.limit.user_over"
+	LinesHidden        Key = "lines.hidden"
 	// TranscriptEarlierOutput heads a reprint that leaves earlier output
 	// out: go-tui-lib's transcript.earlier-output (0035-MADR D14 step 5b).
 	TranscriptEarlierOutput Key = "transcript.earlier-output"
@@ -132,7 +136,7 @@ const (
 var Keys = []Key{
 	RetryOffline, RetryEmptyReply, RetryAttempt, CompactionStart, CompactionFailed, CompactionFailedTurn,
 	CompactionFailedSession, TurnWorking, TurnStopMaxTokens, TurnStopMaxRequests, TurnStopRefusal, TurnStopCancelled,
-	TurnStopMaxTokensTool, LinesHidden, TranscriptEarlierOutput,
+	TurnStopMaxTokensTool, ModelLimitUserOver, LinesHidden, TranscriptEarlierOutput,
 	CommandUnknown, HelpHeading, UsageHeading, UsageCostUnknown, UsageEstimated, UsageNoAccount, SessionHeading,
 	ModelNone, ModelCurrent, ModelList, ModelUnknown, ModelSet, ThinkingCurrent, ThinkingList, ThinkingUnknown,
 	ThinkingSet, ModeCurrent, ModeList, ModeUnknown, ModeAlreadyPlan, ModePlanOn, ModeSet, NameCurrent, NameUsage,

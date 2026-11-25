@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -315,4 +317,111 @@ func TestListingRanksByBuiltInCopy_0071(t *testing.T) {
 	if po := e.providerOptions("openai", provider.Options{}); po.ModelData != nil {
 		t.Error("the options New and the sign-in wizard are given carry a document")
 	}
+}
+
+// slowDiscovery replaces the run's discovery with one that records each
+// model and, after 200 ms, lets the model facts state a 32,000 cap, as a
+// listing read would; before it ends the facts are the offline lookup's (the
+// built-in copy's cap, under the 64,000 ceiling). Both are restored when t
+// ends. A key in the
+// environment gives the session a model, as a run with a credential has;
+// nothing here reads it.
+func slowDiscovery(t *testing.T) func() []string {
+	t.Helper()
+	t.Setenv("OPENAI_API_KEY", "sk-test-only")
+	var mu sync.Mutex
+	var calls []string
+	var done atomic.Bool
+	oldDiscover, oldFacts := discoverLimits, modelFacts
+	discoverLimits = func(ctx context.Context, o provider.Options, id, model string, _ *catalog.ModelsJSON) error {
+		mu.Lock()
+		calls = append(calls, id+"/"+model+" key="+o.APIKey+" workspace="+o.Workspace)
+		mu.Unlock()
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		done.Store(true)
+		return nil
+	}
+	modelFacts = func(o provider.Options, id, model string, mj *catalog.ModelsJSON) llm.Model {
+		if done.Load() {
+			return llm.Model{Provider: id, ID: model, ContextWindow: 1000000, MaxTokens: 32000, MaxTokensFrom: llm.CapCatalog}
+		}
+		return offlineModelFacts(o, id, model, mj)
+	}
+	t.Cleanup(func() { discoverLimits, modelFacts = oldDiscover, oldFacts })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(calls)
+	}
+}
+
+// The CLI's interactive start and a headless run discover the session's
+// model when it starts, and its first call waits for it and carries what it
+// found; the second call discovers nothing more (0066-MADR S3, S4, S9;
+// 0071-MADR P37).
+func TestSession_DiscoversBeforeFirstCall_0066(t *testing.T) {
+	t.Run("cli", func(t *testing.T) {
+		seen := slowDiscovery(t)
+		s := llmtest.NewScript(llmtest.Text("one"), llmtest.Text("two"))
+		h := newModelHarness(t, s, t.TempDir())
+		h.start(Prompt{})
+		h.press("first\r")
+		waitUntil(t, func() bool { return strings.Count(h.stdout.String(), "\r> ") >= 2 })
+		h.press("second\r")
+		waitUntil(t, func() bool { return strings.Count(h.stdout.String(), "\r> ") >= 3 })
+		h.press("\x04")
+		if err := h.wait(); err != nil {
+			t.Fatal(err)
+		}
+		reqs := s.Requests()
+		if len(reqs) != 2 || reqs[0].MaxTokens != 32000 || reqs[1].MaxTokens != 32000 || !slices.Equal(seen(), []string{wantDiscovery}) {
+			t.Errorf("%d calls asking %v, discoveries %q; want two calls at the discovered 32,000 and one discovery", len(reqs),
+				capsOf(reqs), seen())
+		}
+	})
+	t.Run("headless", func(t *testing.T) {
+		seen := slowDiscovery(t)
+		s := llmtest.NewScript(llmtest.Text("ok"))
+		withModel(t, s)
+		if r := runMain(t, nil, "-p", "hello"); r.code != ExitOK {
+			t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+		}
+		if reqs := s.Requests(); len(reqs) != 1 || reqs[0].MaxTokens != 32000 || !slices.Equal(seen(), []string{wantDiscovery}) {
+			t.Errorf("calls asking %v, discoveries %q; want one call at the discovered 32,000 after one discovery", capsOf(reqs), seen())
+		}
+	})
+	// A stored Claude key's Anthropic workspace reaches discovery beside
+	// the key, as it reaches the lookup (0035-MADR D5; 0071-MADR P37;
+	// 0071-PLAN Phase 2b's delta check).
+	t.Run("workspace", func(t *testing.T) {
+		seen := slowDiscovery(t)
+		c := newCfgEnv(t)
+		c.write(c.authFile(), `{"claude": {"type": "api_key", "key": "sk-ant-test-only", "workspace": "wrkspc_1"}}`)
+		s := llmtest.NewScript(llmtest.Text("ok"))
+		withModel(t, s)
+		if r := c.run("--model", "claude/claude-test-1", "-p", "hello"); r.code != ExitOK {
+			t.Fatalf("exit %d, stderr %q", r.code, r.stderr)
+		}
+		want := "claude/claude-test-1 key=sk-ant-test-only workspace=wrkspc_1"
+		if got := seen(); !slices.Equal(got, []string{want}) {
+			t.Errorf("discoveries %q, want %q: the stored key with its workspace", got, want)
+		}
+	})
+}
+
+// wantDiscovery is the one discovery a run with OPENAI_API_KEY makes: the
+// session's model, with the run's key and its workspace (none for OpenAI).
+const wantDiscovery = "openai/gpt-6-luna key=sk-test-only workspace="
+
+// capsOf are rs' MaxTokens.
+func capsOf(rs []*llm.Request) []int {
+	var out []int
+	for _, r := range rs {
+		out = append(out, r.MaxTokens)
+	}
+	return out
 }

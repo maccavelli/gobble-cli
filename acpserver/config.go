@@ -279,6 +279,7 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 		}
 		s.model, s.think = m, clamped
 		a.mu.Unlock()
+		a.discoverModels(ctx, s, prov, m, false) // a model switch discovers; a thinking change does not (0066-MADR D2)
 		value = refOf(prov, m)
 		entries = append(entries, session.Entry{Type: session.TypeModelChange, Provider: prov, ModelID: m})
 		if clamped != think {

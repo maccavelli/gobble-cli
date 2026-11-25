@@ -390,3 +390,10 @@ amendment of this date, P21 and P24 to P28).
   `model.limit.unknown`, `model.limit.learned` and `model.limit.user_over`.
 
 Counts after this addition: 42 decided (S42, S44), 1 out of scope, 0 open, 1 lapsed; 44 rows.
+
+### Note (2026-11-25): Phase 2b's tests and the hook
+
+* **S43's test**, which no row named: `TestDiscover_KiloNoOrganization_0066` (`llm/provider/discover_test.go`), accepted by the
+  coordinator after 0071-PLAN's Phase 2b stop: discovery's requests name no Kilo organization.
+* **D1's hook.** Discovery is started from `acpserver` through `acpserver.Options.Discover`, which `internal/cli` wires to
+  `provider.Discover`: the owner's "Add Options.Discover (Recommended)", 0071-MADR's fourth amendment of this date (P23, P37).

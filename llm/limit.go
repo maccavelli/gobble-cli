@@ -54,6 +54,9 @@ const (
 	// BasisNone is a call that carried no output limit, Tokens 0, such as
 	// one on a ChatGPT route (0071-MADR P22, P35).
 	BasisNone LimitBasis = "none"
+	// BasisService is a cap a service stated, sent below models.json's
+	// maxTokens for the model, which it holds (0071-MADR P28).
+	BasisService LimitBasis = "service"
 )
 
 // OutputLimit is the output limit a call asks for, reasoning included, and

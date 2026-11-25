@@ -79,6 +79,25 @@ var ambientProvider = provider.AmbientWith
 // login's refresh (0051-MADR D9, N6).
 var modelFacts = provider.ModelInfoWith
 
+// discoverLimits discovers a model's limits for the agent's Discover hook
+// (0066-MADR D1; 0071-MADR P37). With a key or a login, or for a provider
+// that takes none, it reads the service, so TestMain replaces it with one
+// that reads nothing: no test reaches a provider through it.
+var discoverLimits = provider.Discover
+
+// lookupOptions are what a lookup and a discovery of provider id read with:
+// the run's key, workspace and login for it, found as modelProvider finds
+// them, its cache and sessions, and gobble's name and version (0005-PLAN
+// F4-2a, F4-3a, F4-3b; 0046-MADR D7).
+func (e *runEnv) lookupOptions(id string) provider.Options {
+	o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions,
+		ClientName: appName, ClientVersion: identity().Version, Set: e.providerSet()}
+	if e.knownLogin(id) {
+		o.Logins = e.logins()
+	}
+	return o
+}
+
 // agentOptions are gobble's agent's options, for `gobble acp` and the
 // in-process agent alike: the ambient provider and its model choice, and
 // the session store in the data directory.
@@ -109,12 +128,12 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
 		ModelInfo: func(id, model string) llm.Model {
-			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), Cache: &e.cache, Sessions: &e.sessions,
-				ClientName: appName, ClientVersion: identity().Version, Set: e.providerSet()}
-			if e.knownLogin(id) {
-				o.Logins = e.logins()
-			}
-			return modelFacts(o, id, model, e.modelsJSON())
+			return modelFacts(e.lookupOptions(id), id, model, e.modelsJSON())
+		},
+		// Each session's model's limits, discovered when it is set, with
+		// what the lookup reads with (0066-MADR D1; 0071-MADR P37).
+		Discover: func(ctx context.Context, id, model string) error {
+			return discoverLimits(ctx, e.lookupOptions(id), id, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},

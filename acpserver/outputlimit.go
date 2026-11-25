@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+
+	acp "github.com/maccavelli/acp-go-sdk2"
 
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/personality"
 )
 
 // contextEstimate is the context's estimate before a call that carries
@@ -28,36 +32,123 @@ func (a *Agent) contextEstimate(s *liveSession, tools jsontext.Value) int {
 // the cap's source and its window, from the catalog (0071-MADR D6).
 func (a *Agent) compactionModel(p llm.Provider, providerID, model, think string) compaction.Model {
 	info := a.modelOf(providerID, model)
-	return compaction.Model{Provider: p, Model: model, Thinking: think, MaxTokens: info.MaxTokens, MaxTokensFrom: info.MaxTokensFrom,
-		Window: info.ContextWindow}
+	c, from, _ := outputCap(info)
+	return compaction.Model{Provider: p, Model: model, Thinking: think, MaxTokens: c, MaxTokensFrom: from, Window: windowOf(info)}
+}
+
+// sourceModelsJSON is the SDK's name of models.json's layer.
+const sourceModelsJSON = "models.json"
+
+// outputCap is a streamed call's cap of info and its source (0071-MADR P17):
+// Limits.StreamedOutput when the catalog's limits know it, otherwise the
+// merged MaxTokens. held reports models.json's maxTokens held below its value
+// by a cap a service stated (P28), and asked is that maxTokens.
+func outputCap(info llm.Model) (c int, from llm.CapSource, held int) {
+	f := info.Limits.StreamedOutput
+	if !f.Known {
+		return info.MaxTokens, info.MaxTokensFrom, 0
+	}
+	if info.MaxTokensFrom == llm.CapUser && f.Source != sourceModelsJSON {
+		for _, o := range f.Others {
+			if o.Source == sourceModelsJSON && o.Tokens > f.Tokens {
+				held = o.Tokens
+			}
+		}
+	}
+	return f.Tokens, info.MaxTokensFrom, held
+}
+
+// windowOf is info's window as compaction and the fit read it (0066-MADR
+// D9): Limits.Window, else Limits.Input where a source states only that,
+// else the merged ContextWindow; 0 for unknown.
+func windowOf(info llm.Model) int {
+	switch {
+	case info.Limits.Window.Known:
+		return info.Limits.Window.Tokens
+	case info.Limits.Input.Known:
+		return info.Limits.Input.Tokens
+	}
+	return info.ContextWindow
 }
 
 // turnLimits is one prompt's agent.Config.OutputLimit (0071-MADR D1, D2,
 // D4): each call's limit from the catalog's cap for the turn's provider and
 // model, read for each call, fitted to the window over contextEstimate, and
-// recorded on the session; last is the turn's last call's.
+// recorded on the session; last is the turn's last call's. note is P28's
+// line, once per session and model, for the prompt's loop to send.
 type turnLimits struct {
 	a        *Agent
 	s        *liveSession
 	provider string
 	model    string
 	last     llm.OutputLimit
+
+	mu      sync.Mutex
+	note    string
+	noteKey string
 }
 
 // limit is the call's output limit: the refused limit's stated room or cap
 // when req already names one (agent.Config.OutputLimit), otherwise
-// llm.FitOutput's.
+// llm.FitOutput's over outputCap and windowOf. A models.json maxTokens a
+// service's stated cap holds is sent as that cap, basis service, and said
+// once per session and model (0071-MADR P28).
 func (l *turnLimits) limit(req *llm.Request) llm.OutputLimit {
 	lim := llm.OutputLimit{Tokens: req.MaxTokens, Basis: llm.BasisRefusal}
 	if req.MaxTokens <= 0 {
 		info := l.a.modelOf(l.provider, l.model)
-		lim = llm.FitOutput(info.MaxTokens, info.MaxTokensFrom, info.ContextWindow, l.a.contextEstimate(l.s, req.Tools))
+		c, from, held := outputCap(info)
+		lim = llm.FitOutput(c, from, windowOf(info), l.a.contextEstimate(l.s, req.Tools))
+		if held > 0 && lim.Basis == llm.BasisUser {
+			lim.Basis = llm.BasisService
+			l.userOver(held, c)
+		}
 	}
 	l.last = lim
 	l.a.mu.Lock()
 	l.s.outLimit = lim
 	l.a.mu.Unlock()
 	return lim
+}
+
+// userOver keeps P28's line for the turn's loop while the session has not
+// yet said it for the model: a service's cap sent over models.json's asked.
+func (l *turnLimits) userOver(asked, stated int) {
+	key := l.provider + "/" + l.model
+	l.a.mu.Lock()
+	said := l.s.userOver[key]
+	l.a.mu.Unlock()
+	if said {
+		return
+	}
+	text := l.a.voice(l.s).Text(personality.ModelLimitUserOver, personality.Args{argModel: l.model,
+		"asked": thousands(int64(asked)), "stated": thousands(int64(stated))})
+	l.mu.Lock()
+	l.note, l.noteKey = text, key
+	l.mu.Unlock()
+}
+
+// sayNote sends the line userOver kept, once, to out, and marks it said for
+// the session and model, so a call that failed before saying it leaves it
+// for the next: the call just made sends a service's cap below
+// models.json's maxTokens, said before its reply, as an agent message,
+// live only (0071-MADR P28; 0071-PLAN Phase 2b's review).
+func (l *turnLimits) sayNote(out *updates) {
+	l.mu.Lock()
+	note, key := l.note, l.noteKey
+	l.note = ""
+	l.mu.Unlock()
+	if note == "" {
+		return
+	}
+	l.a.mu.Lock()
+	if l.s.userOver == nil {
+		l.s.userOver = map[string]bool{}
+	}
+	l.s.userOver[key] = true
+	l.a.mu.Unlock()
+	out.flush()
+	out.send(acp.UpdateAgentMessageText(note + "\n\n"))
 }
 
 // limitFields are the request fields that carry an output limit, as a
@@ -145,6 +236,7 @@ var basisWords = map[llm.LimitBasis]string{
 	llm.BasisWindow:  "held to the room the window leaves",
 	llm.BasisFull:    "the window is full by gobble's estimate",
 	llm.BasisRefusal: "the cap the service stated when it refused the first",
+	llm.BasisService: "the cap the service stated, below your models.json maxTokens",
 }
 
 // sourceWords are each cap source in /context's words.

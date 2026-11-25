@@ -62,6 +62,10 @@ func (a *Agent) cmdCompact(ctx context.Context, t *cmdTurn, instructions string)
 // runCompaction, which reports its start to report. Pi's failures are
 // returned as they are; a failed write is an *acp.RequestError.
 func (a *Agent) compactSession(ctx context.Context, s *liveSession, instructions string, report compactionReport) (compaction.Result, int, error) {
+	// A session's first request may be /compact: it waits for the
+	// discovery of the model it calls, as a first turn does (0066-MADR D1).
+	first, _ := a.choices(s)
+	a.waitDiscovery(ctx, s, a.provOf(s), first)
 	prep, model, err := a.prepareCompaction(s)
 	if err != nil {
 		return compaction.Result{}, 0, err

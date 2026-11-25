@@ -71,6 +71,14 @@ type limitHarness struct {
 
 func newLimitHarness(t *testing.T, settings SessionSettings, info map[string]llm.Model, turns ...llmtest.Turn) *limitHarness {
 	t.Helper()
+	return newLimitHarnessWith(t, settings, info, nil, turns...)
+}
+
+// newLimitHarnessWith is newLimitHarness with mod, when not nil, changing
+// the agent's Options before it is built.
+func newLimitHarnessWith(t *testing.T, settings SessionSettings, info map[string]llm.Model, mod func(*Options),
+	turns ...llmtest.Turn) *limitHarness {
+	t.Helper()
 	h := &limitHarness{t: t, client: &acptest.Client{Allow: true}, fake: &lateScript{s: llmtest.NewScript(turns...)},
 		other: llmtest.NewScript(llmtest.Text("from other")), info: info}
 	if settings.Compaction.KeepRecentTokens == 0 {
@@ -79,7 +87,7 @@ func newLimitHarness(t *testing.T, settings SessionSettings, info map[string]llm
 	choice := ModelChoice{Provider: "fake", Models: []string{"m1", "m2"}, Default: "m1", Providers: []ProviderChoice{
 		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1", "m2"}},
 		{ID: "other", Label: "Other", State: StateLive, Models: []string{"x9"}}}}
-	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
+	opts := Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
 		Provider: func(string, llm.Retry) (llm.Provider, error) { return h.fake, nil },
 		ProviderFor: func(id, _ string, _ llm.Retry) (llm.Provider, error) {
 			if id == "other" {
@@ -89,7 +97,11 @@ func newLimitHarness(t *testing.T, settings SessionSettings, info map[string]llm
 		},
 		Models:    func() ModelChoice { return choice },
 		ModelInfo: h.modelInfo,
-		Settings:  func(string) SessionSettings { return settings }})
+		Settings:  func(string) SessionSettings { return settings }}
+	if mod != nil {
+		mod(&opts)
+	}
+	h.ag = New(opts)
 	h.c = acptest.Connect(t, h.ag, h.client)
 	h.ag.SetConnection(h.c.Agent)
 	t.Cleanup(func() {
@@ -256,6 +268,27 @@ func TestTurnCapHeldToWindow_0071(t *testing.T) {
 		t.Fatalf("the turn asked for %d with %d summaries, want the room %d and no compaction", got, len(h.summaries()), want)
 	}
 	wantMeta(t, resp, want, "window")
+	// 0071 P2b new names: begin
+	// V3 over P17's facts: the cap is fitted to the SDK's limits' window,
+	// which the turn prefers to the merged ContextWindow (windowOf). The
+	// merged window is set apart from it, above the session, so a cap
+	// fitted to it asks for more than the room; the compaction trigger,
+	// which reads the merged window, has no cause to compact, and would at
+	// half of it (0071-MADR P17, V3; 0071-PLAN Phase 2b's delta check).
+	t.Run("limits", func(t *testing.T) {
+		const merged = 1500000
+		m := llm.Model{ContextWindow: merged, Limits: llm.Limits{Output: fact(943718, "listing:kilo"), StreamedOutput: fact(943718, "listing:kilo"),
+			Window: fact(window, "listing:kilo")}}
+		h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": m}, full("r1", used), llmtest.Text("ok"))
+		id := h.session()
+		h.mustPrompt(id, p1)
+		resp := h.mustPrompt(id, p2)
+		if got := h.lastCap(); got != want || len(h.summaries()) != 0 {
+			t.Fatalf("the turn asked for %d with %d summaries, want the room %d and no compaction", got, len(h.summaries()), want)
+		}
+		wantMeta(t, resp, want, "window")
+	})
+	// 0071 P2b new names: end
 }
 
 // Thinking does not change the limit: the same cap at every level, an
@@ -849,5 +882,108 @@ func TestCutCallNoticeBeforeQueued_0071(t *testing.T) {
 	want := []string{"agent Let me read it.", "agent \n\n" + toolCutLine, "user and then this", "agent on it"}
 	if !slices.Equal(order, want) {
 		t.Errorf("updates %q, want %q", order, want)
+	}
+}
+
+// fact is a known limit fact of tokens from source, the others beside it.
+func fact(tokens int, source string, others ...llm.LimitFact) llm.LimitFact {
+	return llm.LimitFact{Tokens: tokens, Known: true, Source: source, Others: others}
+}
+
+// userOverLine is boring's model.limit.user_over for m1 over models.json's
+// 100,000 and a stated 16,000.
+const userOverLine = "models.json asks for 100,000 output tokens for m1; the service stated 16,000, which gobble sends."
+
+// Each call's cap is the SDK's streamed output, its source told apart, and
+// its window the window else the input limit (0071-MADR P17, P28; 0066-MADR
+// D4, D9): a kept stream cap below the output is asked; models.json's
+// maxTokens over a listing is the user's; Pi's default is assumed; nothing
+// known is the assumed 16,384; Claude's input limit holds the call to its
+// room; a models.json maxTokens over a cap a service stated in this process
+// (observed) or on an earlier run (the saved layer) sends the service's cap,
+// basis service, said once per session and model.
+func TestTurnCapFromLimits_0071(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		model llm.Model
+		cap   int
+		basis string
+	}{
+		{"streamed", llm.Model{MaxTokens: 32000, MaxTokensFrom: llm.CapCatalog, ContextWindow: 1000000, Limits: llm.Limits{
+			Output: fact(32000, "listing:claude"), StreamedOutput: fact(16000, "observed", fact(32000, "listing:claude")),
+			Window: fact(1000000, "listing:claude")}}, 16000, "stated"},
+		{"user", llm.Model{MaxTokens: 20000, MaxTokensFrom: llm.CapUser, ContextWindow: 1000000, Limits: llm.Limits{
+			Output: fact(20000, "models.json", fact(128000, "listing:claude")), StreamedOutput: fact(20000, "models.json",
+				fact(128000, "listing:claude")), Window: fact(1000000, "listing:claude")}}, 20000, "user"},
+		{"assumed_default", llm.Model{MaxTokens: 16384, MaxTokensFrom: llm.CapAssumed, ContextWindow: 128000, Limits: llm.Limits{
+			Output: fact(16384, "models.json"), StreamedOutput: fact(16384, "models.json"), Window: fact(128000, "models.json")}},
+			16384, "assumed"},
+		{"unknown", llm.Model{}, 16384, "assumed"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": c.model}, llmtest.Text("ok"))
+			resp := h.mustPrompt(h.session(), "hello")
+			if got := h.lastCap(); got != c.cap {
+				t.Errorf("the turn asked for %d, want %d", got, c.cap)
+			}
+			wantMeta(t, resp, c.cap, c.basis)
+		})
+	}
+	t.Run("input_only", func(t *testing.T) {
+		// Input 40,000 only, the merged window unknown: the room the input
+		// limit leaves holds the 32,000 cap.
+		m := llm.Model{MaxTokens: 32000, MaxTokensFrom: llm.CapCatalog, Limits: llm.Limits{Output: fact(32000, "listing:claude"),
+			StreamedOutput: fact(32000, "listing:claude"), Input: fact(40000, "listing:claude")}}
+		h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": m}, llmtest.Text("ok"))
+		id := h.session()
+		resp := h.mustPrompt(id, "hello")
+		if got := h.lastCap(); got >= 32000 || got < llm.MinOutputTokens {
+			t.Errorf("the turn asked for %d, want the room the 40,000 input limit leaves, below 32,000", got)
+		}
+		wantMeta(t, resp, h.lastCap(), "window")
+	})
+	userOver := func(source string) llm.Model {
+		over := fact(16000, source, fact(100000, "models.json"), fact(128000, "listing:claude"))
+		return llm.Model{MaxTokens: 16000, MaxTokensFrom: llm.CapUser, ContextWindow: 1000000, Limits: llm.Limits{Output: over,
+			StreamedOutput: over, Window: fact(1000000, "listing:claude")}}
+	}
+	for _, c := range []struct{ name, source string }{{"user_over_observed", "observed"}, {"user_over_saved", "service-stated"}} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": userOver(c.source)}, llmtest.Text("one"),
+				llmtest.Text("two"))
+			id := h.session()
+			resp := h.mustPrompt(id, "first")
+			if got := h.lastCap(); got != 16000 {
+				t.Errorf("the turn asked for %d, want the service's 16,000 over models.json's 100,000", got)
+			}
+			wantMeta(t, resp, 16000, "service")
+			h.mustPrompt(id, "second")
+			if got := agentChunks(h.client); !slices.Equal(got, []string{userOverLine + "\n\n", "one", "two"}) {
+				t.Errorf("agent messages %q, want the note once, before the first reply", got)
+			}
+			if ctx := h.context(id); !strings.Contains(ctx, "Output limit: 16,000 tokens on the last call (the cap the service stated, "+
+				"below your models.json maxTokens)") {
+				t.Errorf("/context %q, want the service's cap shown as such", ctx)
+			}
+		})
+	}
+}
+
+// P28's note is marked as said when it is sent: a call that fails before
+// any event leaves it unsent, and the session's next call keeps it to say
+// (0071-PLAN Phase 2b's review). The agent yields a failed call's message
+// before its error, so the case is the turn's limits dropped unsaid.
+func TestUserOverNoteAfterFailure_0071(t *testing.T) {
+	h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{})
+	s := h.live(h.session())
+	first := &turnLimits{a: h.ag, s: s, provider: "fake", model: "m1"}
+	first.userOver(100000, 16000) // kept; the call fails before its first event, so it is never said
+	next := &turnLimits{a: h.ag, s: s, provider: "fake", model: "m1"}
+	next.userOver(100000, 16000)
+	next.mu.Lock()
+	note := next.note
+	next.mu.Unlock()
+	if note != userOverLine {
+		t.Errorf("the next call's note %q, want %q: the first was never said", note, userOverLine)
 	}
 }

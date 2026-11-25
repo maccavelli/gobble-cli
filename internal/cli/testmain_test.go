@@ -58,6 +58,12 @@ func offlineModelFacts(_ provider.Options, id, model string, mj *catalog.ModelsJ
 	return provider.ModelInfoWith(provider.Options{}, id, model, mj)
 }
 
+// offlineDiscover is the tests' discovery: it reads nothing, so no test
+// reaches a provider through the agent's Discover hook (0071-MADR P37).
+func offlineDiscover(context.Context, provider.Options, string, string, *catalog.ModelsJSON) error {
+	return nil
+}
+
 // The tests' browser opener and sign-ins are TestMain's, which open and
 // call nothing; compared by identity, so this test calls none of them
 // (0025-PLAN deviation 9).
@@ -68,6 +74,8 @@ func TestNoBrowserOrSignIn(t *testing.T) {
 		"signInWith":  same(signInWith, noSignIn),
 		"logoutLogin": same(logoutLogin, noLogout),
 		"modelFacts":  same(modelFacts, offlineModelFacts),
+		// 0071-MADR P37: the discovery TestMain set reads nothing.
+		"discoverLimits": same(discoverLimits, offlineDiscover),
 	} {
 		if !ok {
 			t.Errorf("%s is not TestMain's: a test could open a browser or sign in", name)
@@ -133,6 +141,7 @@ func TestMain(m *testing.M) {
 	}
 	listModels = offlineList
 	modelFacts = offlineModelFacts
+	discoverLimits = offlineDiscover
 	openURL, signInWith, logoutLogin = noBrowser, noSignIn, noLogout
 	unownedListing = recordUnowned
 	code := m.Run()
