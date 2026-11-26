@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -10,28 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maccavelli/gobble-cli/llm/catalog"
 	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // listModels lists a provider's models. TestMain replaces it with a lister
 // that fails offline, so no test lists over the network (0020-MADR D7).
 var listModels = provider.List
-
-// builtInModelData is gobble's built-in models.dev copy, parsed once, which
-// every listing ranks by and reads its menu's facts from until a refreshed
-// copy is kept (0071-MADR P6, the owner's "Built-in copy to listings only
-// (Recommended)"; 0072-MADR replaces it). It is nil when the copy cannot be
-// read, which provider.SnapshotErr reports: the listings then rank by the
-// SDK's curated order and name rules. Only the listings get it: the lookups
-// keep the copy as a layer, and New and the sign-in wizard get none.
-var builtInModelData = sync.OnceValue(func() *provider.ModelData {
-	d, err := provider.ParseModelData(bytes.NewReader(catalog.Snapshot()))
-	if err != nil {
-		return nil
-	}
-	return d
-})
 
 // listRetry is the least time between a failed listing and its retry
 // (0020-MADR D3).
@@ -320,7 +303,10 @@ func (e *runEnv) modelListing(sel provider.Selection) *modelListing {
 	key := e.knownKey(sel.ID) // in Pi's order (0005-PLAN F4-3a)
 	login := key == "" && e.knownLogin(sel.ID)
 	o := e.providerOptions(sel.ID, provider.Options{ClientName: appName, ClientVersion: identity().Version})
-	o.ModelData = builtInModelData() // the listing ranks by the built-in copy (0071-MADR P6)
+	// The listing ranks by the current document: the refreshed copy, else the
+	// built-in one (0071-MADR P6; 0072-MADR D7, M74). New and the sign-in
+	// wizard get none.
+	o.ModelData = provider.CurrentModelData()
 	if login {
 		o.Logins = e.logins() // a login lists as a key does (0005-PLAN F4-3b decision 9)
 	}

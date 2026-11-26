@@ -281,6 +281,11 @@ type runEnv struct {
 	// once, under observationMu (0066-MADR D7; 0071-MADR P24 to P27).
 	observations       []savedObservation
 	observationsLoaded bool
+	// modelDataWarned are the model data warnings this run has logged, by
+	// what they warn of, under modelDataMu: each is logged once (0072-MADR
+	// D3, D18, M69).
+	modelDataMu     sync.Mutex
+	modelDataWarned map[string]bool
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select, and

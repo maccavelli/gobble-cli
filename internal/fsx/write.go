@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 )
 
@@ -36,8 +37,26 @@ func (osFS) OpenFile(name string, flag int, perm fs.FileMode) (*os.File, error) 
 	return os.OpenFile(name, flag, perm) //nolint:gosec // G304: an approved path outside the roots
 }
 func (osFS) Chmod(name string, mode fs.FileMode) error { return os.Chmod(name, mode) }
-func (osFS) Rename(oldname, newname string) error      { return os.Rename(oldname, newname) }
-func (osFS) Remove(name string) error                  { return os.Remove(name) }
+func (osFS) Rename(oldname, newname string) error {
+	if r := renameFile.Load(); r != nil {
+		return (*r)(oldname, newname)
+	}
+	return os.Rename(oldname, newname)
+}
+func (osFS) Remove(name string) error { return os.Remove(name) }
+
+// renameFile, when set, is the rename of a write outside any root.
+var renameFile atomic.Pointer[func(oldname, newname string) error]
+
+// SetRename makes the writes outside any workspace (WriteFileMode,
+// ReplaceFile) rename through rename until restore is called. It is a test
+// seam (0072-PLAN's review deviation, R6), for a test in another package
+// that must fail or pause a rename between a temporary file and its target;
+// nothing else calls it, and no two tests may use it at once.
+func SetRename(rename func(oldname, newname string) error) (restore func()) {
+	old := renameFile.Swap(&rename)
+	return func() { renameFile.Store(old) }
+}
 
 // WriteFile replaces or creates abs with data, and its parent directories.
 // It writes a temporary file beside abs and renames it into place, so a

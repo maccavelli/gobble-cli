@@ -35,6 +35,14 @@ built with the session's document and OpenCode routes from it (D17, D19, D22, D2
 D21, M54, M55 and M62 are re-pointed; Phase 4's hand-in becomes Phase 2b, between Phases 2 and 3. Re-grounded at 073fd1f. See
 "Amendment of 2026-11-25: built on v1.33.0" at the end. No row of this record is open.)*
 
+*(2026-11-25, third addition at the end: re-grounded at 927c7dd by the PLAN's Phase 0; D2's sha256 is over the compact form;
+M64 gains `TestBinaryCompletionMode`; five cases put to the owner by the PLAN's Phase 1 stop.)*
+
+*(2026-11-25, fourth addition at the end: the answers to those five cases, M77 to M81.)*
+
+*(2026-11-25, fifth addition at the end: Phase 1's review, and the owner's "Follow any, but refuse https→http
+(Recommended)", M82.)*
+
 ## Context and Problem Statement
 
 Every fact gobble knows of a model without asking its provider (its name, window, output cap, input kinds, reasoning and
@@ -176,7 +184,8 @@ for one document a rename already writes atomically. D hard-codes data.
   (`os.CreateTemp`, owner-only; the directory by `appdirs.EnsurePrivateDir`) and moved with `fsx.ReplaceFile`; a failure
   removes the temporary file and leaves the old one as it was. No lock: each process renames a whole file; the last wins.
   After an accepted write, temporary files of that pattern older than an hour are removed. Reads through
-  `fsx.ReadRegularFile`, limited to 32 MiB.
+  `fsx.ReadRegularFile`, limited to 32 MiB. *(2026-11-25, the review of Phase 1: written by `internal/fsx`'s atomic writer,
+  which syncs the file and its directory; the sweep covers `attempt.json`'s temporary files too. See the fifth addition.)*
 * **D3. A file that is not a copy** (not JSON, truncated, another `version`, a wrong `sha256`, a refused `document`, over 32
   MiB, not a regular file) is no copy: one log warning with the path and the reason; due at once; replaced by the next accepted
   download, never removed before.
@@ -185,7 +194,8 @@ for one document a rename already writes atomically. D hard-codes data.
   user agent, `If-None-Match` and `If-Modified-Since` from a copy of the same source when it holds them; a body limited to
   32 MiB; then `ParseMetadata` and `Encode`, so only the nine sections are kept and each decodes. A 304 renews the copy's
   `fetched` and writes nothing else. Redirects are followed as Go's client follows them (up to ten, to any host), and the copy
-  is stamped with the URL asked for. The fetch's own deadline: 30 s in the background, 120 s for `gobble models refresh`. It
+  is stamped with the URL asked for. *(2026-11-25, "Follow any, but refuse https→http (Recommended)": a redirect from `https`
+  to `http` fails the download, M82.)* The fetch's own deadline: 30 s in the background, 120 s for `gobble models refresh`. It
   lives in `llm/provider` (F7) and keeps no cache: two calls are two requests.
 * **D5. A failed fetch** (offline, a status other than 200 or 304, the deadline, a body past the limit or not a document)
   changes nothing on disk or in memory; it is recorded in `attempt.json`.
@@ -211,6 +221,8 @@ for one document a rename already writes atomically. D hard-codes data.
   reads no file; `TestNoBrowserOrSignIn` checks both by identity. `llm/provider` gains a `TestMain` with 0046 D4's network
   guard, and its tests use in-memory transports and URLs under `.invalid`. The two binary tests (F8) set every proxy variable
   to a closed port and check that no copy was written under their `GOBBLE_HOME`. `make check-test-isolation` runs.
+  *(2026-11-25, the coordinator's call on Q-C: `llm/provider`'s `TestMain` runs `TestWireOffline` and `TestProbePort` in a
+  second child without the proxy variables (M79).)*
 * **D11. Settings.** `modelData.refreshHours` (default 24, at most 8,760) and `modelData.warnDays` (default 7, at most
   3,650): integers, at least 0, global only, read at process start; 0 turns each off; a larger value is "must be at most N"
   (F12), and the default is used.
@@ -287,6 +299,10 @@ for one document a rename already writes atomically. D hard-codes data.
   Phase 3: `catalog.Snapshot`, `catalog.Source`. *(2026-11-25: `ModelData`, `ParseModelData` and `Options.ModelData` are
   built by 0071's pin (its P3), with nil handing no document; "nil is the current" is re-pointed: nil hands none, and
   `internal/cli` and `acpserver` pass the current or the session's document explicitly. This record adds the others.)*
+  *(2026-11-25, "Add the four names (Recommended)" and "Hooks take the session's document (Recommended)": D21 also lists
+  `ModelDataStamp`, `(*ModelData).Stamped`, `(*ModelData).Document()` and `ModelDataURL` (M77), and the session's
+  `*provider.ModelData` as the first argument of `acpserver.Options.ModelInfo` and `Options.CachedLimits` (M80). See the
+  fourth addition.)*
 
 ### Consequences
 
@@ -329,7 +345,7 @@ Each decided row's plant is in the PLAN, one to one. "Copy" is the disk copy; "c
 | M12 | A status other than 200 or 304 | decided | as M11, `status` | `…/status` | D5 |
 | M13 | A body over 32 MiB, or not a document | decided | as M11 | `…/oversize`, `…/not_document` | D5 |
 | M14 | A document with none of the nine sections | decided | refused, `--force` or not | `TestModelDataGuards_0072/empty` | D6 |
-| M15 | Same source: a section the copy has is missing, or does not decode | decided | refused; the copy kept | `…/section_missing`, `…/section_malformed` | D6; F5 |
+| M15 | Same source: a section the copy has is missing, or does not decode | decided | refused; the copy kept *(2026-11-25, "As a failed download (Recommended)": "does not decode" is a section the SDK reads as absent; one whose bytes fail the SDK's decode is M13's failure, M78)* | `…/section_missing`, `…/section_malformed` | D6; F5 |
 | M16 | Same source: a section with fewer models | decided | under half the copy's: refused; half or more: accepted | `…/shrink_below_half`, `…/shrink_half` | D6 |
 | M17 | No copy, or a copy from another source | decided | any document past M14 accepted | `…/first`, `…/other_source` | D6 |
 | M18 | A document identical to the copy | decided | saved with the new time | `TestModelsRefreshCmd_0072/unchanged` | D6 |
@@ -372,7 +388,7 @@ Each decided row's plant is in the PLAN, one to one. "Copy" is the disk copy; "c
 | M55 | The document and the SDK's limits on `v1.33.0` | decided | handed in by 0093's hand-in, not as a layer (supersedes 0066 D3's "not handed") *(2026-11-25: the hand-in is `catalog.WithMetadata`, the SDK's `llmprovider/catalog/model_metadata.go:242-260` at `v1.33.0`; it replaces the built-in copy's layer that 0071's pin keeps (0066 S42); built in Phase 2b)* | `TestLookupGetsSessionModelData_0072` | D17; Q1 |
 | M56 | An SDK-side persisted store | out of scope | ruled out by Q1's SDK side: the SDK holds no document of its own | | Q1 |
 | M57 | A source or mirror setting, or a pinned file path | out of scope | a follow-up; `refreshHours: 0` is the pinned mode | | |
-| M58 | A redirect, to another host | decided | followed (Go's client, up to ten); the copy stamped with the URL asked for | `TestFetchModelDataRedirect_0072` (302 to another `.invalid` host) | D4; case 11 |
+| M58 | A redirect, to another host | decided | followed (Go's client, up to ten); the copy stamped with the URL asked for *(2026-11-25, "Follow any, but refuse https→http (Recommended)": but a redirect from `https` to `http` fails the download, M82)* | `TestFetchModelDataRedirect_0072` (302 to another `.invalid` host) | D4; case 11 |
 | M59 | The fetch's deadline | decided | 30 s in the background, 120 s for the command | `TestFetchModelDataDeadline_0072` (`synctest`) | D4; case 8 |
 | M60 | A session's facts during its life | decided | taken at create, load or fork; kept until it ends; in memory only; a resume takes the current copy; a model it lacks gets the custom-id warning | `TestSessionKeepsModelData_0072` | D19; case 9 |
 | M61 | A session that began with none | decided | takes the first download when it lands and keeps it | `TestSessionWithNoneGainsFirstCopy_0072` | D19; call 1 |
@@ -503,3 +519,68 @@ the provider's saved caps as a "service-stated" caller layer below models.json (
 | M76 | The saved caps' layer beside the session's document (Phase 2b) | decided | unchanged by the hand-in: every lookup, limits call and `New` built for a session gets the session's document by `WithMetadata` and the saved caps' layer by `WithModelLayer`, below models.json | `TestProviderGetsSessionModelData_0072` gains a `saved_caps` case | 0071 Q6, P24; M62 |
 
 Counts after this addition: 73 decided, 2 out of scope, 1 struck, 0 open; 76 rows.
+
+### Third addition (2026-11-25): re-grounded at 927c7dd; Phase 0's measurements
+
+The PLAN's Phase 0 ran at `927c7dd` (0071's Phase 2c ended, go-llmprovider-sdk `v1.33.0`); its execution record lists each
+moved line. No fact F1 to F12 changed. What Phase 0 measured, and what it adds here:
+
+* **D2, M2: the copy's `sha256` is over the re-encoded form.** A `jsontext.Value` written by `jsonx.MarshalStrict` and read
+  back by `jsonx.UnmarshalStrict` is compacted (the 2026-10-14 copy's `Encode` bytes, 515,680, read back as 515,648; the final
+  newline and white space dropped), and that form is stable on a second round trip. As the PLAN's Phase 0 step 2 decides, D2's
+  `document` is held, and its `sha256` taken, in the compact form, which M2's round trip then keeps byte for byte.
+* **M69 covers two more downloads.** The strict policy refuses a `document` whose kept sections repeat a name or hold invalid
+  UTF-8, both of which `ParseMetadata` accepts; such a download cannot be saved, which is M69's row.
+* **M58: confirmed.** Go's client follows a 302 to another host, and `resp.Request.URL` differs from the URL asked for.
+* **M64 gains a test.** `internal/cli/complete/binary_test.go`'s `TestBinaryCompletionMode` builds and runs gobble's binary
+  without `internal/cli`'s seams (in completion mode, which M29 says loads and never fetches); it can take a closed-port proxy,
+  so M64's list adds it: every proxy variable a closed port, and no `model-data/models-dev.json` under its home after the run.
+* **Put to the owner** (the PLAN's Phase 1 stop, Q-A to Q-E): the names Phase 1 needs beyond D21; M15's `section_malformed`,
+  since `ParseMetadata` refuses a document with a section that does not decode (F5) before D6's guards meet it; D10's guard in
+  `llm/provider`, which turns two existing tests red or skipped; how a session's document reaches `acpserver`'s `ModelInfo`
+  and `CachedLimits` hooks (0071 P46), which take no session; and `TestModelsInfo`, whose exact output M38's `data` line
+  changes. No row is changed until they are answered.
+
+### Fourth addition (2026-11-25): the answers to Phase 1's stop
+
+The owner answered Q-A, Q-B and Q-D, relayed by the coordinator, each quoted exactly; Q-C and Q-E are the coordinator's
+calls, made on the owner's earlier ruling for the same kind of case (0071's Q-H, **"Expect the new output (Recommended)"**),
+recorded as such.
+
+| Ruling, as given | Label | Rows |
+| :--- | :--- | :--- |
+| Q-A. The exported surface Phase 1 needs | "Add the four names (Recommended)" | M77; D21 |
+| Q-B. A download whose section the SDK cannot decode | "As a failed download (Recommended)" | M78; M13, M15 |
+| Q-C. D10's guard in `llm/provider`: "`offline_test.go:67` and `TestProbePort` run in a second child process without proxy variables. No assertion changes." | the coordinator's call, on 0071 Q-H's precedent | M79; D10, M10 |
+| Q-D. The session's document and `acpserver`'s `ModelInfo` and `CachedLimits` hooks | "Hooks take the session's document (Recommended)" | M80; D19, D21 |
+| Q-E. `TestModelsInfo` and M38's `data` line | the coordinator's call, on 0071 Q-H's "Expect the new output (Recommended)" | M81; M38 |
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| M77 | D21's names for the stamp, the copy's bytes, the 304 and the URL | decided | `ModelDataStamp` (`Source`, `Fetched`, `ETag`, `LastModified`) is `Stamp()`'s type; `(*ModelData).Stamped(s)` is the same parsed document under stamp `s`, the original unchanged; `(*ModelData).Document()` is `Encode`'s bytes in their compact form, the caller's own copy; `ModelDataURL` is `https://models.dev/api.json`; `FetchModelData(ctx, url, o) (*ModelData, bool, error)` sends the validators of `o.ModelData` when its stamp's source is `url`, and the bool reports a 304, which carries no body and returns `o.ModelData`'s document stamped anew | `TestModelDataStamp_0072` (`llm/provider`); M9's `TestFetchModelDataConditional_0072` | Q-A |
+| M78 | A download with a section the SDK cannot decode | decided | `ParseMetadata` refuses the document (F5), so it is M13's failure: nothing changes on disk or in memory; `attempt.json` `failed`, `not_document`; `--force` cannot save it. M15's `section_malformed` is a section the SDK reads as absent (present without `models`, or `null`), which `Encode` drops and D6 refuses as missing | `TestModelDataRefreshFails_0072/section_undecodable`; `TestModelDataGuards_0072/section_malformed` | Q-B; F5 |
+| M79 | `llm/provider`'s network guard and the two tests whose dials need no proxy | decided | `TestMain` runs the package's tests behind 0046 D4's guard in one child, and `TestWireOffline` and `TestProbePort` in a second child with no proxy variable, which first checks that `net/http` names no proxy; the guarded child leaves those two out; no assertion changes | the unguarded child's check in `TestMain`; `TestWireOffline`, `TestProbePort` | Q-C |
+| M80 | The session's document and `acpserver`'s `ModelInfo` and `CachedLimits` hooks (Phases 2 and 2b) | decided | both hooks take the session's `*provider.ModelData` first (nil: the current); `acpserver` passes the session's; `internal/cli` hands it to the lookups and to `provider.CachedLimits` as `Options.ModelData`; the test literals that set the hooks take the argument, no assertion changes | M50's `TestTurnCapFromModelData_0072` (Phase 2); M55's `TestLookupGetsSessionModelData_0072` (Phase 2b) | Q-D |
+| M81 | `TestModelsInfo`, whose stdout M38's `data` line changes (Phase 2) | decided | its expected output gains the `data` line, by a dated note in Phase 2 | `TestModelsInfo` | Q-E; M38 |
+
+What these change above, as annotations: D21 gains M77's four names and M80's two hook signatures; D10's guard is M79's;
+M13 and M15 read as M78 says. Counts after this addition: 78 decided, 2 out of scope, 1 struck, 0 open; 81 rows.
+
+### Fifth addition (2026-11-25): the review of Phase 1 and a redirect downgrade
+
+An independent review (`code-reviewer`) of Phase 1, relayed by the coordinator, and the owner's ruling on one case it raised,
+quoted exactly. The other findings are fixes inside rows already decided; the PLAN's deviation of this date lists them.
+
+| Ruling, as given | Label | Rows |
+| :--- | :--- | :--- |
+| A redirect from `https` to `http` | "Follow any, but refuse https→http (Recommended)" | M58, M82; D4 |
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| M82 | A redirect from an `https` URL to an `http` one | decided | the download fails before the `http` request is sent: nothing changes on disk or in memory; `attempt.json` `failed`, `redirect_downgrade` (`FetchModelData`'s error wraps `llm.ErrNotPermitted`); a redirect to any other host over `https` is still followed (M58) | `TestFetchModelDataRedirect_0072/https_to_http`; `TestModelDataRefreshFails_0072/redirect_downgrade` | the owner's ruling above; M58 |
+
+What the review changes above, as annotations: D2's write is `internal/fsx`'s atomic writer, which syncs the file and its
+directory (its temporary file is `.<name>.gobble-<hex>.tmp`, and a file with more than one hard link is written in place, as
+that writer does for every file); the sweep reads the directory with `os.ReadDir` and also removes `attempt.json`'s temporary
+files; D4's 32 MiB body limit is gobble's own, ahead of the SDK's. Counts after this addition: 79 decided, 2 out of scope, 1
+struck, 0 open; 82 rows.

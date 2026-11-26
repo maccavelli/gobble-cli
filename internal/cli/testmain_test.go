@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net"
 	"net/http"
@@ -63,6 +64,16 @@ func offlineModelFacts(_ provider.Options, id, model string, mj *catalog.ModelsJ
 func offlineDiscover(context.Context, provider.Options, string, string, *catalog.ModelsJSON) error {
 	return nil
 }
+
+// offlineModelData is the tests' model data fetch: it fails offline, so no
+// test reaches models.dev (0072-MADR D10).
+func offlineModelData(context.Context, string, provider.Options) (*provider.ModelData, bool, error) {
+	return nil, false, fmt.Errorf("tests fetch no model data: %w", llm.ErrOffline)
+}
+
+// noModelDataCopy is the tests' copy reader: it reads no file, so no test
+// reads the host's cache (0072-MADR D10).
+func noModelDataCopy(string) (*provider.ModelData, error) { return nil, fs.ErrNotExist }
 
 // The tests' browser opener and sign-ins are TestMain's, which open and
 // call nothing; compared by identity, so this test calls none of them
@@ -142,6 +153,7 @@ func TestMain(m *testing.M) {
 	listModels = offlineList
 	modelFacts = offlineModelFacts
 	discoverLimits = offlineDiscover
+	fetchModelData, loadModelData = offlineModelData, noModelDataCopy
 	openURL, signInWith, logoutLogin = noBrowser, noSignIn, noLogout
 	unownedListing = recordUnowned
 	code := m.Run()

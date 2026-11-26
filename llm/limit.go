@@ -20,7 +20,8 @@ type CapSource string
 // The sources. A zero CapSource is CapCatalog when the cap is known, and
 // CapAssumed when it is not.
 const (
-	// CapCatalog is the embedded snapshot or the provider's listing.
+	// CapCatalog is the models.dev document gobble reads (0072-MADR D7) or
+	// the provider's listing.
 	CapCatalog CapSource = "catalog"
 	// CapUser is models.json's maxTokens for the model, an entry's or an
 	// override's.

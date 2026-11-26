@@ -1,12 +1,9 @@
 package provider
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"runtime/debug"
 	"slices"
-	"sync"
 
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider"
 	"github.com/maccavelli/go-llmprovider-sdk/llmprovider/catalog"
@@ -14,16 +11,6 @@ import (
 	"github.com/maccavelli/gobble-cli/llm"
 	gcatalog "github.com/maccavelli/gobble-cli/llm/catalog"
 )
-
-// snapshot is the embedded models.dev document, parsed once. A document the
-// SDK refuses leaves every model unknown, and SnapshotErr reports it.
-var snapshot = sync.OnceValues(func() (*catalog.Metadata, error) {
-	meta, err := catalog.ParseMetadata(bytes.NewReader(gcatalog.Snapshot()))
-	if err != nil {
-		return nil, fmt.Errorf("provider: the embedded model catalog cannot be read, so models are unknown: %w", err)
-	}
-	return &meta, nil
-})
 
 // sdkPath is go-llmprovider-sdk's module path.
 const sdkPath = "github.com/maccavelli/go-llmprovider-sdk"
@@ -48,18 +35,19 @@ func SDKVersion() string {
 // caller logs it: models are then unknown, never refused (0005-PLAN F4-2a
 // deviation 1).
 func SnapshotErr() error {
-	_, err := snapshot()
+	_, err := builtIn()
 	return err
 }
 
 // ModelInfo is what the catalog knows of model on provider id, from the
-// embedded snapshot and, with apiKey, the provider's listing as the SDK has
+// current document (CurrentModelData: the copy gobble keeps, else the
+// built-in one; 0072-MADR D7) and, with apiKey, the provider's listing as the SDK has
 // it cached. It waits for no listing: one not yet cached is fetched in the
 // background for a later call (0005-PLAN F4-2a). With a login, the SDK first
 // asks it for a token, which may refresh at the issuer before ModelInfo
 // returns (go-llmprovider-sdk catalog.CachedModel; 0046-MADR).
 // A model nothing knows has only its provider and id. mj, when not nil, is
-// models.json: a layer above the snapshot, and its thinkingLevelMap
+// models.json: a layer above the document, and its thinkingLevelMap
 // (0005-PLAN F4-2b). With no apiKey, a provider with an OAuth login uses
 // logins' stored login, when logins is not nil (0005-PLAN F4-3b). workspace
 // is a Claude key's, for its listing (0035-MADR D5).
@@ -116,7 +104,7 @@ func limitsSource(id string, src llmprovider.TokenSource) llmprovider.TokenSourc
 // own requests, read what the service states (0066-MADR D1, as amended
 // 2026-11-25). It reads with what ModelInfoWith reads with: o's credential,
 // transport, base URL, cache and set, the Claude workspace, gobble's name and
-// version, the embedded snapshot as the "models.dev" layer, o's saved caps
+// version, the current document as the "models.dev" layer, o's saved caps
 // as the "service-stated" layer above it, and models.json above both
 // (0071-MADR P24). It passes no Kilo organization (0066-MADR S43). The SDK
 // bounds it at 10 seconds; ctx ends it sooner. Its error is each source's
@@ -154,14 +142,14 @@ func CachedLimits(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Limi
 // the options discovery hands it.
 var lookupLimits = catalog.LookupLimits
 
-// lookupLayers are a lookup's layers: the embedded snapshot, when it
-// parsed; saved, the caps services stated on earlier runs, when not nil,
+// lookupLayers are a lookup's layers: the current document
+// (CurrentModelData), when there is one, never two (0072-MADR M19); saved, the caps services stated on earlier runs, when not nil,
 // above it; then models.json, when mj is not nil, above both (0071-MADR
 // P21, P24).
 func lookupLayers(mj *gcatalog.ModelsJSON, saved catalog.Layer) []catalog.Layer {
 	var layers []catalog.Layer
-	if meta, err := snapshot(); err == nil {
-		layers = append(layers, *meta)
+	if d := CurrentModelData(); d != nil {
+		layers = append(layers, d.doc.meta)
 	}
 	if saved != nil {
 		layers = append(layers, saved)
@@ -268,14 +256,15 @@ func heldToServiceStated(f llm.LimitFact) llm.LimitFact {
 }
 
 // KnownModels are the models gobble knows of provider id with no request:
-// its curated models, then the snapshot's models for it that take tools, by
-// id, each once (0005-PLAN F4-2c), as Pi's generator keeps only those.
+// its curated models, then the current document's models for it that take
+// tools, by id, each once (0005-PLAN F4-2c; 0072-MADR D7), as Pi's generator
+// keeps only those.
 func KnownModels(id string) []string {
-	meta, err := snapshot()
-	if err != nil { // the curated models alone; SnapshotErr reports it
+	d := CurrentModelData()
+	if d == nil { // the curated models alone; SnapshotErr reports it
 		return Models(id)
 	}
-	return toolModels(id, meta)
+	return toolModels(id, &d.doc.meta)
 }
 
 // toolModels is KnownModels over meta; nil holds no models.
@@ -359,7 +348,7 @@ func factOf(f catalog.Fact) llm.LimitFact {
 }
 
 // modelsJSONLayer is models.json as an SDK layer: each fact it gives is
-// marked known, so it outranks the snapshot's field by field.
+// marked known, so it outranks the document's field by field.
 type modelsJSONLayer struct{ mj *gcatalog.ModelsJSON }
 
 func (modelsJSONLayer) Name() string { return "models.json" }

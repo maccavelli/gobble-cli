@@ -1,12 +1,9 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -266,7 +263,8 @@ func TestCutCallAfterText_0071(t *testing.T) {
 }
 
 // builtInListing is a listing of two OpenAI models the built-in copy knows:
-// gpt-5-mini takes images, o3-mini text only.
+// gpt-5-mini takes images, o3-mini text only (TestModelDataCurrent_0072's
+// copy states the reverse).
 type builtInListing struct{}
 
 func (builtInListing) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -276,47 +274,6 @@ func (builtInListing) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}},
 		Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
-}
-
-// Until a refreshed copy is kept, production's listings rank by the built-in
-// models.dev copy: the listing's Options carry it, and a listing served in
-// memory reads the copy's facts as the copy states them; the options New and
-// the sign-in wizard are given carry none (0071-MADR P6, the owner's
-// "Built-in copy to listings only (Recommended)").
-func TestListingRanksByBuiltInCopy_0071(t *testing.T) {
-	e, _ := modelEnv(t)
-	t.Setenv("OPENAI_API_KEY", "test-only")
-	listed := make(chan provider.Options, 1)
-	withLister(t, func(_ context.Context, _, _ string, o provider.Options) (provider.Listing, error) {
-		listed <- o
-		return provider.Listing{}, errors.New("recorded")
-	})
-	l := e.modelListing(provider.Selection{ID: "openai"})
-	l.start()
-	o := <-listed
-	if o.ModelData == nil {
-		t.Fatal("the listing's Options carry no document")
-	}
-	copyData, err := provider.ParseModelData(bytes.NewReader(catalog.Snapshot()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	served := func(d *provider.ModelData) []string {
-		t.Helper()
-		lo := o
-		lo.HTTPClient, lo.Cache, lo.Sessions, lo.LastGood, lo.ModelData = &http.Client{Transport: builtInListing{}}, nil, nil, nil, d
-		got, err := provider.List(t.Context(), "openai", fmt.Sprintf("sk-copy-%d-%d", os.Getpid(), time.Now().UnixNano()), lo)
-		if err != nil || !got.Live {
-			t.Fatalf("listing %+v (%v), want live", got, err)
-		}
-		return provider.SearchListing(got, "vision")
-	}
-	if got, want := served(o.ModelData), served(copyData); len(want) == 0 || !slices.Equal(got, want) {
-		t.Errorf("vision over the listing's document %q, want the built-in copy's %q", got, want)
-	}
-	if po := e.providerOptions("openai", provider.Options{}); po.ModelData != nil {
-		t.Error("the options New and the sign-in wizard are given carry a document")
-	}
 }
 
 // slowDiscovery replaces the run's discovery with one that records each

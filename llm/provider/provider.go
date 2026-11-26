@@ -53,8 +53,9 @@ type Options struct {
 	HTTPClient *http.Client
 	// ModelData is the models.dev document List ranks by and reads its
 	// menu's facts from; nil hands none, and the listing ranks by the SDK's
-	// curated order and name rules. Only List reads it: New and the
-	// lookups do not (0071-MADR P3, P6).
+	// curated order and name rules. FetchModelData takes its validators
+	// from it. New and the lookups do not read it: the lookups read
+	// CurrentModelData (0071-MADR P3, P6; 0072-MADR D4, D7).
 	ModelData *ModelData
 	// SessionID names the conversation: the routing key a cached request
 	// carries, and OpenCode's and Kilo's session headers (0021-MADR D4).

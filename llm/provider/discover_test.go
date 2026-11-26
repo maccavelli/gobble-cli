@@ -356,11 +356,11 @@ func TestProvider_ModelsJSONIsCaller_0066(t *testing.T) {
 // own value is not asserted.
 func TestLimits_BuiltInCopyBelowListing_0066(t *testing.T) {
 	const model = "claude-haiku-5-5" // a model the built-in copy states
-	meta, err := snapshot()
+	built, err := builtIn()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info, ok := meta.Model(llmprovider.ProviderClaude, model); !ok || !info.Has(catalog.FieldMaxOutputTokens) || info.MaxOutputTokens == 12345 {
+	if info, ok := built.doc.meta.Model(llmprovider.ProviderClaude, model); !ok || !info.Has(catalog.FieldMaxOutputTokens) || info.MaxOutputTokens == 12345 {
 		t.Fatalf("the built-in copy states no output for %s other than the listing's, so the test shows nothing", model)
 	}
 	w := &limitWire{listing: claudeListingOf(model, 12345, 200000)}
