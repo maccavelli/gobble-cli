@@ -1,6 +1,6 @@
 ---
-status: complete
-date: 2026-11-23
+status: in-progress
+date: 2026-11-27
 associated-madr: "0068-MADR-adopt-go-llmprovider-sdk-v1-32-0.md"
 ---
 <!-- markdownlint-disable MD013 MD024 MD033 MD036 MD060 -->
@@ -330,3 +330,91 @@ Status stays `in-progress`. The PLAN is not marked `complete` until step 8's `-c
 The coordinator ran `go test -count=3 ./llm/provider/ ./internal/auth/ ./internal/cli/ ./acpserver/` at `2e4dd60` on the session Mac through `run-heavy` (started 2026-11-23T16:55:59-06:00, status 0, elapsed 353 s): `ok llm/provider 352.321s`, `ok internal/auth 10.151s`, `ok internal/cli 210.128s`, `ok acpserver 104.220s`. The Gates bullet asked for `-count=3` on `internal/cli` only, while Phase 2 step 8 names all four sign-in packages; this run covers both readings.
 
 Step 8 is met. Re-checked: Phase 0, Phase 1, Phase 2 acceptance and Phase 3 steps 1 to 4 are met as recorded above. Status is `complete`, 2026-11-23.
+
+## Amendment 2026-11-27: W3's proof, a dial another program's listener can answer
+
+*(Added 2026-11-27. Nothing above is rewritten. The MADR's "Amendment 2026-11-27" holds the cause, the evidence, the options and the rows W2, W3 and W15 as amended; this section is their implementation. The owner's ruling: "Find and fix the flake, then tag (Recommended)". Status `in-progress` until the steps below are met.)*
+
+### Steps
+
+1. **Re-ground.** At `60e8049`: `llm/provider/signin_test.go:492-499` (`dial`), `:526-563` (W2), `:565-606` (W3); `llm/provider/testmain_test.go:333-345` (the guard's listener); go-llmprovider-sdk `v1.33.0` `llmprovider/auth/oauth_loopback.go:454-487`.
+2. **Red at the base (scratch clone only).** A scratch test holds every free `127.0.0.1` port from 49152 to 65279 and runs `TestSignInAnotherDeviceNeedsNoListener`: it must fail on `:602`. The same run, unheld, passes.
+3. **The helper.** `llm/provider/listens_test.go` (`listensHere`, its doc, and `TestListensHereSeesOnlyThisProcess`, W15); `listens_fd_test.go` (`//go:build linux || darwin`: `/dev/fd`, `getsockname`); `listens_linux_test.go` (`SO_ACCEPTCONN`); `listens_darwin_test.go` (`TCP_CONNECTION_INFO`'s state is `TCPS_LISTEN`, through `golang.org/x/sys/unix`, already a direct requirement); `listens_windows_test.go` (`GetExtendedTcpTable`, IPv4 and IPv6, rows owned by `os.Getpid()`); `listens_other_test.go` (any other OS: an error, so the tests fail rather than pass unseen).
+4. **W3 and W2.** W3 asks `listensHere` for the redirect port while the sign-in waits, in place of the dial, and its comment states why. W2 adds the same question, expecting true, beside its dial.
+5. **Green.** Step 2's held-range scratch run passes with steps 3 and 4 applied; W2, W3 and W15 pass on this Mac, the Linux machine and the Windows laptop.
+6. **Plants** (scratch clone, one change each; no `tools/plant.py` exists in this repository, so a scratch Python driver applies each by an exact, unique anchor): P20 and P21 as the MADR states them, each failing its row's test, the failing line quoted.
+7. **Gates.** `make pre-add-check`; `go test -count=1 ./...` through `run-heavy`; `make check-test-isolation` through `run-heavy`; `make preflight` on the three hosts through `run-on-host` (`--race` on the Linux machine for the race run); `llm/provider` repeated on the Windows laptop through `run-on-host --need windows` (W2, W3 and W15 at `-count=5000`, the package at `-count=3`); `make check-records markdownlint`; denyscan; the redact dry run.
+
+Exit: no blocker, W2, W3 and W15 tested, P20 and P21 caught; nothing staged by the agent.
+
+### Execution record
+
+#### Pass 1 (2026-11-27, at `60e8049`)
+
+**Step 1, re-ground.** Every line cited above is where it says at `60e8049`. The SDK pin is `v1.33.0` (`go.mod:16`); its `browserEndpoint` draws the no-listener Grok port at `oauth_loopback.go:454-487`, as 0068-PLAN Phase 0 step 3 read at `v1.32.0`.
+
+**The cause (read-only, before any change).**
+
+| Id | What | Result |
+| :--- | :--- | :--- |
+| RUN1 | CI run 46011000011, `validate (windows-2025)`, `go test -count=1 ./...` at `60e8049` (`gh run view --log-failed`) | `signin_test.go:602: the browser was opened 0 times and the redirect address answered a dial (<nil>); want neither: no listener`; `FAIL llm/provider 117.530s`; every other package `ok` |
+| RUN2 | the Windows laptop, `run-on-host --need windows -- go test -run '^TestSignInAnotherDeviceNeedsNoListener$' -count=5000 ./llm/provider` at `60e8049` | 8 failures of 5000 (0.16 %), each the RUN1 line; `FAIL llm/provider 11.973s` |
+| RUN3 | the Windows laptop, idle: `netstat -an -p tcp`, `netsh int ipv4 show dynamicport tcp`; this Mac: `sysctl net.inet.ip.portrange` | 26 distinct listening ports in 49152 to 65535 (49664 to 60167); the dynamic range starts at 49152, 16384 ports; this Mac's is 49152 to 65535. 26 / 16384 = 0.16 %, RUN2's rate |
+| RUN4 | scratch clone of `60e8049`, this Mac, `run-heavy`: a separate Python process holds every free `127.0.0.1` port from 49152 to 65279 (16078 held), then `go test -run '^TestSignInAnotherDeviceNeedsNoListener$' -count=5` | 5 of 5 fail on the RUN1 line (red at the base); unheld, an in-process variant's control passed 5 of 5 |
+| RUN5 | `git show 60e8049 -- llm/provider/testmain_test.go` and the guard's history | `TestMain` gains only `installTestModelData` (no listener, no reordering); the guard's `127.0.0.1:0` listener in the parent process dates from `713c24f` and ran in `101c6bb`'s passing CI |
+
+**Steps 3 and 4, the helper and the two tests.** As step 3 lists. The first run on this Mac failed W15 and W2 (`listens_test.go:53: listensHere(49654), this test's own listener = false, <nil>; want true`): macOS refuses `getsockopt(SO_ACCEPTCONN)` with `ENOPROTOOPT` (a scratch probe printed `acceptconn=0 protocol not available` for a listening descriptor). The positive controls caught it; macOS now reads `TCP_CONNECTION_INFO`'s state, Linux keeps `SO_ACCEPTCONN`, and the files are split as step 3 now says.
+
+**Step 5, green.**
+
+| Id | What | Result |
+| :--- | :--- | :--- |
+| RUN6 | RUN4's held range (16090 held by the separate process), on a scratch clone with steps 3 and 4: W2, W3 and W15 at `-count=20` | exit 0: 60 of 60 pass |
+| RUN7 | this Mac, the tree: the three tests `-count=1` | exit 0 |
+
+**Step 6, plants** (`<scratch>/gflake/plant.py`, a copy of the fixed clone each, anchors asserted present once and landed).
+
+| Plant | Host | Result |
+| :--- | :--- | :--- |
+| P20 | this Mac | `signin_test.go:633: the browser was opened 0 times and this process listened on the redirect port: true (<nil>); want neither: no listener`; W2 and W15 pass |
+| P20 | the Windows laptop (`run-on-host --need windows`, the log's target the laptop, `remote status 1`) | the same line; W2 and W15 pass, so the Windows table finds this process's listener and not the guard's |
+| P21 | this Mac | `listens_test.go:48: listensHere(49159), the guard's port, held by another process = true, <nil>; want false`; W2 and W3 pass |
+
+**Step 7, gates of pass 1.** This Mac: `make pre-add-check` on the seven Go files (exit 0), `run-heavy -- go test -count=1 ./...` (exit 0, 38 packages `ok`), `run-heavy -- make check-test-isolation` (exit 0), `run-heavy -- make preflight` (exit 0). The Linux machine: `run-on-host --need linux --race -- make race` and `-- make preflight` (exit 0 each, both on the Linux machine, not WSL). The Windows laptop: W15 `-count=5000` (exit 0), `make preflight` (exit 0); **W3 `-count=5000` failed once**: `signin_test.go:633: the browser was opened 0 times and this process listened on the redirect port: true (<nil>); want neither: no listener`.
+
+#### Pass 1 findings (2026-11-27)
+
+* **A defect of pass 1 (W16).** The process that runs W3 holds its own listener in the dynamic range, the test issuer's `httptest` server, so the drawn port can be this process's without being the sign-in's: about 1 / 16384 a run. Pass 2 compares against the ports this process held before the sign-in (`listensSince`). Red at pass 1, on a scratch clone: a scratch test holds every free port from 49152 to 65279 inside the test process, then runs W3: 3 of 3 fail on `signin_test.go:633` (`run-heavy`); green at pass 2: 3 of 3 pass.
+* **Loopback exhaustion under `-count=5000` on the Windows laptop (found, not changed: a follow-up).** W2 hung once at `-count=5000` beside W3 and W15, and once alone right after W3's 5000, each time 600 s, ending `signin_test.go:590: ... grok sign-in failed (timeout)`. A scratch diagnostic that reports the test browser's GET error found 1120 of them in one run: `dial tcp 127.0.0.1:49153: connectex: Only one usage of each socket address (protocol/network address/port) is normally permitted`. Windows gives each new `:0` listener the same few low ports (49153 to 49155), and thousands of connections a minute to one such port use up its TIME_WAIT four-tuples. The test browser in W2 drops its GET's error (`signin_test.go`, the `go func` in `TestSignInAsksWhereTheBrowserIs`, unchanged since `2e4dd60`), so the sign-in waits for the SDK's 600 s. W2 alone at `-count=5000` at `60e8049`, from a quiet laptop, passed (22 s). No CI run is near this rate; it is a limit of repeating the sign-in tests thousands of times on Windows, recorded here as a follow-up (the test browser could report its GET's error and end the sign-in), not built.
+* **A breach of this pass: ports held on this Mac while another run went.** The held-range scratch runs (`hold_and_run.py`) hold about 16 000 of this Mac's 16 384 dynamic ports in a Python process while `run-heavy` runs the test. Pass 2's run waited 138 s in the queue first, holding them from 09:11:31 to 09:14:18 local time, while another session's `go test -count=1 ./...` ran on this Mac (09:11:27 to 09:13:49): that run's result cannot be trusted and should be run again. The same hold also made this pass's own base diagnostic fall back to this Mac (`ssh: connect to host ...: Can't assign requested address`), whose result is discarded. The two pass 1 holds (08:18:43 and 08:18:56) waited 0 s and lasted 1 s and 4 s.
+
+#### Pass 2 (2026-11-27): W2 and W3 ask `listensSince`
+
+* **Change.** `ownListeningPorts` (each OS file) returns the set of ports this process listens on; `listensHere(port)` reads it; `listensSince(before, port)` is a listener on `port` now that was not in `before`. `newBrowserRecord` takes `before` once the test's issuer exists and before `SignIn`; W2 and W3 ask `listensSince`. W14's record is unchanged (it reads only the open count).
+* **Red and green (W16).** Pass 1 under in-process held ports: 3 of 3 fail at `signin_test.go:633`; pass 2: 3 of 3 pass. RUN4's held range in a separate process, pass 2, W2, W3 and W15 at `-count=20`: 60 of 60 pass.
+* **Plants on pass 2.** P20 on this Mac: `signin_test.go:647: the browser was opened 0 times and this process listened on the redirect port: true (<nil>); want neither: no listener`, W2 and W15 pass. P21 on this Mac: `listens_test.go:59: listensHere(63393), the guard's port, held by another process = true, <nil>; want false`, W2 and W3 pass.
+* **The Windows laptop.** W3 alone at `-count=5000`: exit 0, no failure (8 of 5000 at `60e8049`, RUN2). `llm/provider` at `-count=3`: exit 0 (353 s). W2 at `-count=5000` is not counted, for the loopback exhaustion above.
+
+| Gate (pass 2) | Host | Exit |
+| :--- | :--- | :--- |
+| `make pre-add-check` (the seven Go files: gofmt, golangci-lint, govulncheck) | this Mac, `run-heavy` | 0 |
+| `go test -count=1 ./...` | this Mac, `run-heavy` | 0 (38 packages `ok`) |
+| `make race` | the Linux machine, `run-on-host --need linux --race` | 0 |
+| `make preflight` | the Linux machine, `run-on-host --need linux --race` (the flag only keeps it off WSL) | 0 |
+| `make preflight` | the Windows laptop, `run-on-host --need windows` | 0 |
+| W3 `-count=5000`; `llm/provider` `-count=3` | the Windows laptop | 0; 0 |
+| `make check-test-isolation` | the Linux machine, `run-on-host --need linux --race` | 0 |
+| `make check-test-isolation` | this Mac, `run-heavy` | 0 (finished 10:02:21 local time, after hand-back) |
+| `make preflight` | this Mac, `run-heavy` | 0 (finished 10:02:57 local time, after hand-back) |
+| `make check-records`, `make markdownlint`, denyscan (`--changed`, 9 files), `github-disclosure.py redact` (dry run) | this Mac | 0, 0, 0 hits, "would edit 0 file(s)" |
+
+#### Pass 3 (2026-11-27): W17, a failed GET of the test browser ends the sign-in
+
+*(The owner's ruling, relayed by the coordinator: "Make the hang a fast failure (Recommended)"; pass 3 approved, test-only. The MADR's "Pass 3" holds W17 and P22.)*
+
+* **Steps.** (1) Red on a scratch copy of the pass 2 tree: W2's GET aimed at a refused address hangs until a bound `-timeout`. (2) W2's browser becomes `callbackBrowser`, which records a failed GET (an error, or a status other than 200) and ends the sign-in by cancelling its context; W2 fails at once naming it; `TestSignInBrowserFailureEndsTheSignIn` drives it with a transport that refuses every request. (3) Green; the same scratch reproduction fails within seconds naming the error. (4) P22 on a scratch copy. (5) W2 on the Windows laptop at `-count=2000`. (6) The gates again on the final tree. No port-range holder and no shell loop in this pass.
+* **Red (step 1).** Scratch copy of the pass 2 tree, W2's GET aimed at `127.0.0.1:1`, `run-heavy -- go test -timeout 30s -run '^TestSignInAsksWhereTheBrowserIs$'`: `panic: test timed out after 30s`, `TestSignInAsksWhereTheBrowserIs (30s)`; the sign-in waited.
+* **Green (step 3).** This Mac: W2, W3, W15 and `TestSignInBrowserFailureEndsTheSignIn` pass. The same scratch reproduction on the pass 3 tree fails in 0.00 s: `signin_test.go:636: the test browser's GET of the callback failed, which ended the sign-in (context canceled): Get "http://127.0.0.1:1/callback?...": dial tcp 127.0.0.1:1: connect: connection refused`.
+* **P22 (step 4).** The error dropped again (`_ = err`): `signin_test.go:673: the browser recorded <nil>; want its GET's error, the test transport refuses every request` and `:676: the sign-in ended with context deadline exceeded; want context.Canceled, the browser ending it, not the 30 s bound`, at 30.00 s; W2 passes.
+* **The Windows laptop (step 5).** W2 at `-count=2000`: exit 0 (6.9 s), no failure, so no exhaustion showed at that count.
+* **Gates (step 6, the final tree).** `run-heavy`, this Mac: `make pre-add-check` (seven Go files) 0; `go test -count=1 ./...` 0; `make check-test-isolation` 0; `make preflight` 0. The Linux machine (`run-on-host --need linux --race`): `make race` 0. `make check-records` 0, `make markdownlint` 0, denyscan (`--changed`) 0 hits, the redact dry run "would edit 0 file(s)".

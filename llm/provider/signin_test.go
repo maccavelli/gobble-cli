@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -498,18 +499,113 @@ func dial(ctx context.Context, host string) error {
 	return err
 }
 
-// browserRecord is what a test's browser saw: how often it was opened, and
-// whether the redirect address answered a dial while the sign-in waited.
+// browserRecord is what a test's browser saw: how often it was opened,
+// whether the redirect address answered a dial while the sign-in waited, and
+// whether a listener of this process, not there when before was taken, was
+// on its port then (listensSince).
 type browserRecord struct {
 	mu      sync.Mutex
 	opened  int
 	dialErr error
+	before  map[int]bool
+	held    bool
+	heldErr error
+	// getErr is why the browser's GET of the callback failed, nil while it
+	// has not (0068-MADR W17).
+	getErr error
+}
+
+// browserFailed records why the browser's GET of the callback failed.
+func (b *browserRecord) browserFailed(err error) {
+	b.mu.Lock()
+	b.getErr = err
+	b.mu.Unlock()
+}
+
+// browserErr is why the browser's GET of the callback failed, or nil.
+func (b *browserRecord) browserErr() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.getErr
+}
+
+// callbackBrowser is a test's browser for "On this machine": it records, in
+// rec, whether the redirect address answers a dial and whether a listener of
+// this process that was not there before is on its port, then GETs the
+// callback with client. A GET that fails, or that the callback answers with
+// a status other than 200, is recorded and ends the sign-in through end, so
+// the test fails at once naming it rather than after the SDK's 600 s wait
+// (0068-MADR W17).
+func callbackBrowser(t *testing.T, ti *testIssuer, rec *browserRecord, client *http.Client, end context.CancelFunc) func(string) error {
+	t.Helper()
+	return func(u string) error {
+		redirect, state := ti.authorizeParams(t, u)
+		ru, err := url.Parse(redirect)
+		if err != nil {
+			return err
+		}
+		rec.listenedAt(ru)
+		derr := dial(t.Context(), ru.Host)
+		rec.mu.Lock()
+		rec.opened++
+		rec.dialErr = derr
+		rec.mu.Unlock()
+		go func() {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+				redirect+"?code=c1&state="+url.QueryEscape(state), nil)
+			if err == nil {
+				var resp *http.Response
+				if resp, err = client.Do(req); err == nil {
+					_ = resp.Body.Close()
+					if resp.StatusCode != http.StatusOK {
+						err = fmt.Errorf("the callback answered %s", resp.Status)
+					}
+				}
+			}
+			if err != nil {
+				rec.browserFailed(err)
+				end()
+			}
+		}()
+		return nil
+	}
+}
+
+// newBrowserRecord takes this process's listening ports before the sign-in
+// starts.
+func newBrowserRecord(t *testing.T) *browserRecord {
+	t.Helper()
+	before, err := ownListeningPorts()
+	if err != nil {
+		t.Fatalf("this process's listening ports: %v", err)
+	}
+	return &browserRecord{before: before}
 }
 
 func (b *browserRecord) get() (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.opened, b.dialErr
+}
+
+// listened is what listensHere answered for the redirect port.
+func (b *browserRecord) listened() (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.held, b.heldErr
+}
+
+// listenedAt records whether a listener of this process that was not there
+// before the sign-in is on redirect address ru's port.
+func (b *browserRecord) listenedAt(ru *url.URL) {
+	port, err := strconv.Atoi(ru.Port())
+	held := false
+	if err == nil {
+		held, err = listensSince(b.before, port)
+	}
+	b.mu.Lock()
+	b.held, b.heldErr = held, err
+	b.mu.Unlock()
 }
 
 // waitForCtx is an Input that answers nothing until its context ends, as a
@@ -521,34 +617,24 @@ func waitForCtx(ctx context.Context, _ string) (string, error) {
 
 // A browser sign-in at a terminal with a paste offered asks where the browser
 // is, with "On this machine" first; that answer binds the listener (the
-// redirect address answers a dial while the sign-in waits) and opens the
-// browser, which completes it (0068-MADR W1, W2; Q1).
+// redirect address answers a dial while the sign-in waits, and listensHere
+// finds this process listening on its port) and opens the browser, which
+// completes it (0068-MADR W1, W2; Q1; W2 as amended 2026-11-27). A failed GET
+// of the browser ends the sign-in and fails the test at once, naming it
+// (W17).
 func TestSignInAsksWhereTheBrowserIs(t *testing.T) {
 	ti, o := signInIssuer(t)
 	o.Method = MethodBrowser
-	rec := &browserRecord{}
-	o.OpenURL = func(u string) error {
-		redirect, state := ti.authorizeParams(t, u)
-		ru, err := url.Parse(redirect)
-		if err != nil {
-			return err
-		}
-		derr := dial(t.Context(), ru.Host)
-		rec.mu.Lock()
-		rec.opened++
-		rec.dialErr = derr
-		rec.mu.Unlock()
-		go func() {
-			resp, err := http.Get(redirect + "?code=c1&state=" + url.QueryEscape(state)) //nolint:noctx // the test's browser
-			if err == nil {
-				_ = resp.Body.Close()
-			}
-		}()
-		return nil
-	}
+	rec := newBrowserRecord(t)
+	ctx, end := context.WithCancel(t.Context())
+	defer end()
+	o.OpenURL = callbackBrowser(t, ti, rec, &http.Client{}, end)
 	store := &memLogins{}
 	s := &script{t: t, choose: func(string, []Choice) int { return 0 }, input: waitForCtx}
-	c, err := SignIn(t.Context(), "grok", s, o, store)
+	c, err := SignIn(ctx, "grok", s, o, store)
+	if berr := rec.browserErr(); berr != nil {
+		t.Fatalf("the test browser's GET of the callback failed, which ended the sign-in (%v): %v", err, berr)
+	}
 	if got := s.asked(); !slices.Equal(got, []string{browserQuestion}) {
 		t.Errorf("the sign-in asked %q, want the question where the browser is", got)
 	} else if m := s.menus[0]; len(m) != 2 || m[0].Label != browserHere || m[1].Label != browserElsewhere {
@@ -557,19 +643,59 @@ func TestSignInAsksWhereTheBrowserIs(t *testing.T) {
 	if opened, derr := rec.get(); opened != 1 || derr != nil {
 		t.Errorf("the browser was opened %d times and the redirect address answered %v; want once, and a listener", opened, derr)
 	}
+	if held, herr := rec.listened(); !held || herr != nil {
+		t.Errorf("this process listened on the redirect port: %v (%v); want a listener of the sign-in's", held, herr)
+	}
 	if err != nil || c.Key != "" || store.logins["grok"] == nil {
 		t.Fatalf("the sign-in: %+v, %v, saved %v", c, err, store.logins)
 	}
 }
 
-// "On another device" binds no listener (the redirect address is refused), does
-// not open the browser, shows the URL, and a pasted callback completes the
-// sign-in. Grok's sign-in names a port of its own, so no test holds 1455 or
-// 1457 (0068-MADR W3; Q1).
+// When the test browser's GET of the callback fails, as it did under the
+// Windows laptop's loopback exhaustion ("connectex: Only one usage of each
+// socket address"), the browser records the error and ends the sign-in: it
+// returns context.Canceled within seconds and saves nothing, never after the
+// SDK's 600 s. The 30 s bound only turns a sign-in left waiting into this
+// test's failure (0068-MADR W17; the owner's "Make the hang a fast failure
+// (Recommended)").
+func TestSignInBrowserFailureEndsTheSignIn(t *testing.T) {
+	ti, o := signInIssuer(t)
+	o.Method = MethodBrowser
+	rec := newBrowserRecord(t)
+	bounded, unbound := context.WithTimeout(t.Context(), 30*time.Second)
+	defer unbound()
+	ctx, end := context.WithCancel(bounded)
+	defer end()
+	refused := errors.New("the test transport refuses every request")
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, refused })}
+	o.OpenURL = callbackBrowser(t, ti, rec, client, end)
+	store := &memLogins{}
+	s := &script{t: t, choose: func(string, []Choice) int { return 0 }, input: waitForCtx}
+	_, err := SignIn(ctx, "grok", s, o, store)
+	if berr := rec.browserErr(); !errors.Is(berr, refused) {
+		t.Errorf("the browser recorded %v; want its GET's error, %v", berr, refused)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("the sign-in ended with %v; want context.Canceled, the browser ending it, not the 30 s bound", err)
+	}
+	if store.logins["grok"] != nil {
+		t.Errorf("saved %v", store.logins)
+	}
+}
+
+// "On another device" binds no listener (while the sign-in waits, no socket
+// of this process that was not there before it started listens on the
+// redirect address's port), does not open the browser, shows the URL, and a
+// pasted callback completes the sign-in. Grok's sign-in is used, so no test
+// holds 1455 or 1457 (0068-MADR W3; Q1). The port is drawn from 49152 to
+// 65535, the dynamic range where every :0 bind on the host lands, so a dial
+// there can reach another program's listener, and this process's own issuer
+// can sit on it: the question is this process's sockets, against those it
+// held before the sign-in (listensSince; W3 as amended 2026-11-27).
 func TestSignInAnotherDeviceNeedsNoListener(t *testing.T) {
 	ti, o := signInIssuer(t)
 	o.Method = MethodBrowser
-	rec := &browserRecord{}
+	rec := newBrowserRecord(t)
 	o.OpenURL = func(string) error {
 		rec.mu.Lock()
 		rec.opened++
@@ -578,7 +704,7 @@ func TestSignInAnotherDeviceNeedsNoListener(t *testing.T) {
 	}
 	store := &memLogins{}
 	s := &script{t: t, choose: func(string, []Choice) int { return 1 }}
-	s.input = func(ctx context.Context, _ string) (string, error) {
+	s.input = func(context.Context, string) (string, error) {
 		u := shownURL(s)
 		if u == "" {
 			return "", errors.New("no URL was shown before the paste")
@@ -588,18 +714,16 @@ func TestSignInAnotherDeviceNeedsNoListener(t *testing.T) {
 		if err != nil {
 			return "", err
 		}
-		derr := dial(ctx, ru.Host)
-		rec.mu.Lock()
-		rec.dialErr = derr
-		rec.mu.Unlock()
+		rec.listenedAt(ru)
 		return redirect + "?code=c1&state=" + url.QueryEscape(state), nil
 	}
 	c, err := SignIn(t.Context(), "grok", s, o, store)
 	if got := s.asked(); !slices.Equal(got, []string{browserQuestion}) {
 		t.Errorf("the sign-in asked %q, want the question where the browser is", got)
 	}
-	if opened, derr := rec.get(); opened != 0 || derr == nil {
-		t.Errorf("the browser was opened %d times and the redirect address answered a dial (%v); want neither: no listener", opened, derr)
+	opened, _ := rec.get()
+	if held, herr := rec.listened(); opened != 0 || held || herr != nil {
+		t.Errorf("the browser was opened %d times and this process listened on the redirect port: %v (%v); want neither: no listener", opened, held, herr)
 	}
 	if err != nil || store.logins["grok"] == nil {
 		t.Fatalf("the sign-in by paste: %+v, %v, saved %v", c, err, store.logins)

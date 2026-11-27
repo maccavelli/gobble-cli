@@ -1,6 +1,6 @@
 ---
 status: accepted
-date: 2026-11-23
+date: 2026-11-27
 decision-makers: repository owner
 consulted: "the owner\'s answers of 2026-11-23 to Q1 and Q2, relayed by the coordinator (see "Owner rulings"); go-llmprovider-sdk's CHANGELOG.md `[v1.32.0]` (tag `v1.32.0`, 2026-11-22) and the records it cites (0080-MADR, 0081-MADR, 0082-MADR, 0083-MADR, 0084-MADR, 0085-MADR, 0087-MADR, each in that repository); gobble's call sites read at `84dad4a`"
 informed: none
@@ -162,8 +162,8 @@ Two questions were put to the owner as three options each; both are answered ("O
 | Row | Input or state | Status | Outcome | Decided by / test |
 | :--- | :--- | :--- | :--- | :--- |
 | W1 | terminal, browser sign-in (OpenAI, Grok, plan), paste offered | decided | asked, the SDK's question (Q1, "Yes, take the SDK's question (Recommended)", 2026-11-23) | `TestSignInAsksWhereTheBrowserIs` |
-| W2 | answer "On this machine", an empty line | decided | Q1: the listener binds (the test dials the authorize URL's redirect address while the sign-in waits and connects), `OpenURL` is called | same test |
-| W3 | answer "On another device" | decided | Q1: no listener (the same dial is refused; Grok's sign-in is used, which listens on an OS-chosen port, so no test holds 1455 or 1457 and the plan tests in parallel cannot collide), `OpenURL` not called, the URL shown, a paste completes it | `TestSignInAnotherDeviceNeedsNoListener` |
+| W2 | answer "On this machine", an empty line | decided | Q1: the listener binds (the test dials the authorize URL's redirect address while the sign-in waits and connects), `OpenURL` is called *(amended 2026-11-27, "Amendment 2026-11-27" below: also, while the sign-in waits, `listensHere` finds a socket of this test process listening on the redirect address's port: the helper's positive control on every operating system)* | same test |
+| W3 | answer "On another device" | decided | Q1: no listener (~~the same dial is refused~~ *amended 2026-11-27: while the sign-in waits, `listensHere` finds no socket of this test process listening on the redirect address's port; there is no dial, which another program's listener answered, failing CI on `60e8049`; see "Amendment 2026-11-27" below*; Grok's sign-in is used, which ~~listens on an OS-chosen port~~ *amended 2026-11-27: names a port drawn from 49152 to 65535, the operating systems' dynamic range, and never bound*, so no test holds 1455 or 1457 and the plan tests in parallel cannot collide), `OpenURL` not called, the URL shown, a paste completes it | `TestSignInAnotherDeviceNeedsNoListener` (*2026-11-27: plant P20*) |
 | W4 | `NoPaste` (no terminal) or `Steps` (`--json`, ACP-driver) | decided | no question: the SDK asks none under `NoPastePrompt` or a driver; unchanged behaviour | `TestSignInNoPasteAsksNoBrowserQuestion` (a guard: green at the base; plant P12; *annotated 2026-11-23 by the coordinator's decision that the PLAN's numbering is authoritative: plant P13*) |
 | W5 | a device or API-key method | decided | no question; this is the SDK's rule and no gobble line decides it, so the test is a guard with no plant | `TestSignInDeviceAsksNoBrowserQuestion` |
 | W6 | scripted prompters of gobble's tests that meet a browser sign-in | decided | Q1: each answers the question (index 0) where it reaches it: `TestSignInGrokBrowser` (`signin_test.go:194`), and the five terminal surfaces of `TestConsentWordingOnEverySurface` (F14), whose answers become method, browser question, then consent | the tests the PLAN's Phase 0 finds red; *2026-11-23, the owner's "Yes, under W6 (Recommended)": also `TestOfferedConsentTextIsGobbles` (`llm/provider/policy_test.go`) and `TestACPLoginOffersMenu/the_menu` (`internal/cli/acp_test.go`), which Phase 0 found red* |
@@ -238,6 +238,8 @@ Two questions were put to the owner as three options each; both are answered ("O
 
 Counts: 3 + 14 + 8 + 10 + 9 + 4 + 4 = 52 rows; 43 decided, 9 out of scope (S3, W10, W11, K5, L6, E2, E3, E4, R4), 0 open.
 
+*(2026-11-27: "Amendment 2026-11-27" below adds W15, W16 and W17: 55 rows, 46 decided, 0 open.)*
+
 ## Owner rulings
 
 *(2026-11-23, the owner's answers, relayed by the coordinator; the labels are exact.)*
@@ -288,6 +290,57 @@ No question remains open, and the record is `accepted` (2026-11-23) by the state
 
 ### Not verified
 
-* The SDK's profile URL (`GET {origin}{prefix}/api/profile`) and the body a fake endpoint must send for 200, and what redirect address a no-listener sign-in names (W3's proof dials it), are read from the SDK in the PLAN's Phase 0; no live call is made, ever, by this record.
+* The SDK's profile URL (`GET {origin}{prefix}/api/profile`) and the body a fake endpoint must send for 200, and what redirect address a no-listener sign-in names (W3's proof dials it), are read from the SDK in the PLAN's Phase 0; no live call is made, ever, by this record. *(2026-11-27: W3's proof no longer dials; see the amendment below.)*
 * Whether the SDK's "Sign-in cancelled" notice appears beside gobble's own cancel line (W12) is read from a test's output, not a live run.
 * Which existing tests the bump turns red beyond those named here: the PLAN's Phase 0 lists them on a scratch clone before any file of the tree changes; a red outside this record's rows is a deviation.
+
+## Amendment 2026-11-27: W3's proof, a dial another program's listener can answer
+
+*(Added 2026-11-27. Nothing above is rewritten; the dated notes in W2, W3, the counts and "Not verified" point here.)*
+
+### The ruling
+
+The coordinator's account: CI's `validate (windows-2025)` job on `60e8049` (run 46011000011) failed `TestSignInAnotherDeviceNeedsNoListener`, which blocks the `v0.11.0` tag. The owner chose: "Find and fix the flake, then tag (Recommended)".
+
+### The cause, with evidence
+
+* **What failed.** `signin_test.go:602: the browser was opened 0 times and the redirect address answered a dial (<nil>); want neither: no listener`. The test and the sign-in code are unchanged since `2e4dd60`; CI on `101c6bb` passed.
+* **What the dial reaches.** Under "On another device" the SDK's Grok sign-in names `http://127.0.0.1:<port>/callback` with a port drawn at random from 49152 to 65535 and binds nothing (go-llmprovider-sdk `v1.33.0`, `llmprovider/auth/oauth_loopback.go:454-487`; 0068-PLAN Phase 0 step 3 read the same at `v1.32.0`). W3's premise, "listens on an OS-chosen port", described the "On this machine" path, not this one. That range is the dynamic (ephemeral) port range of Windows (`netsh int ipv4 show dynamicport tcp` on the Windows laptop: start 49152, 16384 ports) and macOS (`net.inet.ip.portrange.first` 49152, `.last` 65535 on this Mac), and overlaps Linux's default 32768 to 60999 from 49152. So any listener on the host in that range answers the dial: another package's `httptest` server under `go test ./...`, the network guard that `TestMain` starts in the parent process (`llm/provider/testmain_test.go:335`, a `127.0.0.1:0` listener for the whole run), or a system service. The dial tests a property of the host, not of the sign-in.
+* **Measured (RUN1 to RUN4, the PLAN's "Amendment 2026-11-27" execution record).** The Windows laptop, idle, listens on 26 distinct ports in 49152 to 65535 (from 49664 to 60167, by `netstat -an -p tcp`), so one run of the test fails with probability about 26 / 16384 = 0.16 %. Run 5000 times there at `60e8049`, it failed 8 times (0.16 %), each on the CI's line. On a scratch clone with every free `127.0.0.1` port from 49152 to 65279 held by a listener that is not the sign-in's, it failed 5 of 5 runs on the CI's line; unheld, 5 of 5 passed.
+* **Not the cause.** `60e8049`'s change to `llm/provider`'s `TestMain` installs the test model data (`testmain_test.go:48-51`): it binds nothing and reorders nothing, and the guard's listener predates it (`713c24f`) and was there in `101c6bb`'s passing run. The failure is a chance every run has had since `2e4dd60`.
+* **The same defect in the SDK.** The SDK found it in its own test and moved "binds nothing" to an unexported listen hook (go-llmprovider-sdk 0083-PLAN, "Amendment 2026-11-17: the no-listener test that another program's listener can fail"; `TestNoLoopback_BindsNothing_0083`). gobble cannot reach that hook.
+
+### Options
+
+* **A. Chosen: ask the operating system which sockets this test process holds.** A test helper, `listensHere(port)`, reports whether a socket of this process listens on a TCP port: on Linux and macOS it reads the process's own descriptors (`/dev/fd`) and asks each for its bound port and whether it listens (Linux: `SO_ACCEPTCONN`; macOS, which refuses that query with `ENOPROTOOPT`: the TCP state from `TCP_CONNECTION_INFO`); on any other OS it returns an error, so the tests fail rather than pass unseen; on Windows it reads the listener table (`GetExtendedTcpTable`, `TCP_TABLE_OWNER_PID_LISTENER`, IPv4 and IPv6) and keeps the rows this process owns. W3 asks it instead of dialling; W2 asks it as well as dialling, as the helper's positive control on every OS; W15 pins that another process's listener is not this process's. *(Pass 2: W2 and W3 ask `listensSince`, which leaves out ports this process already listened on when the sign-in started; W16.)* Good, because W3 keeps gobble's own end-to-end "no listener" observation, no other program can pass or fail it, and nothing is sent to another program's port. Bad, because it is about 150 lines of test code across five OS-specific files.
+* **B. Drop the dial and rest "binds nothing" on the SDK's tests** (`TestQuestionAnswerElsewhere_0083`, `TestNoLoopback_BindsNothing_0083`), as the SDK did for its own `x/signin` test. Good, because it is the smallest change. Bad, because gobble's test then observes no listener at all: a loosened assertion.
+* **C. The SDK exports a listen seam**, gobble's test records every bind. Good, because it proves "no bind attempted". Bad, because it needs an SDK record, release and pin bump before `v0.11.0`, and the SDK set aside an exported route for this (its 0083-PLAN amendment, option D).
+* **Not options:** retrying the test, holding the port (it is drawn inside the sign-in, after the test could hold it), or a dial that tolerates an answer; each hides the defect.
+
+### Rows
+
+| Row | Input or state | Status | Outcome | Decided by / test |
+| :--- | :--- | :--- | :--- | :--- |
+| W3 (as amended) | "On another device", while the sign-in waits for the paste | decided | ~~`listensHere(<the redirect address's port>)` is false with no error~~ *pass 2: `listensSince(<this process's listening ports before the sign-in>, <the redirect address's port>)` is false with no error: no listener of this process on that port that was not there before the sign-in started; this process's own issuer, an `httptest` server on a dynamic port, can sit on the drawn port (W16)*; no dial | A; `TestSignInAnotherDeviceNeedsNoListener`; red at `60e8049` by the held-range reproduction; plant P20 |
+| W2 (as amended) | "On this machine", while the sign-in waits | decided | ~~`listensHere(<the redirect address's port>)` is true~~ *pass 2: `listensSince` is true*, and the dial still connects | A; `TestSignInAsksWhereTheBrowserIs` |
+| W15 | a port another process listens on (the network guard's, in `TestMain`'s parent process), and a port this process listens on, then closes | decided | `listensHere` is false for the other process's port, which this process cannot bind; true for its own listener; false once that is closed | A; `TestListensHereSeesOnlyThisProcess` (new helper: red from plant P21) |
+| W16 (pass 2, 2026-11-27) | a listener this test process already held before the sign-in sits on the drawn port (its issuer's `httptest` server; found 1 in 5000 on the Windows laptop) | decided | not counted: W3 passes | A; `TestSignInAnotherDeviceNeedsNoListener`; red at pass 1 by a scratch test that holds every free port from 49152 to 65279 in the test process before the sign-in (3 of 3 fail, `signin_test.go:633`), green at pass 2 (3 of 3) |
+
+### Plants
+
+* **P20** (production, `llm/provider/signin.go`): `wizardPrompter.Notify` binds the redirect address of an authorize URL it is given, so "On another device" holds a listener there. `TestSignInAnotherDeviceNeedsNoListener` must fail.
+* **P21** (the test helper, since no production line decides W15): `listensHere` answers "a bind of `127.0.0.1:<port>` fails", which is true for any holder, as a dial is. `TestListensHereSeesOnlyThisProcess` must fail on the guard's port.
+
+### Pass 3 (2026-11-27): the test browser's failed GET
+
+*(Added 2026-11-27, after pass 2's hand-back.)* W2's test browser dropped its GET's error (`signin_test.go`, `TestSignInAsksWhereTheBrowserIs`, unchanged since `2e4dd60`), so a GET that failed, as under the Windows laptop's loopback exhaustion at `-count=5000` (`connectex: Only one usage of each socket address`), left the sign-in waiting for the SDK's 600 s and the test failing only then, on a timeout that names no cause.
+
+**Owner ruling (2026-11-27, relayed by the coordinator; the label is exact):** "Make the hang a fast failure (Recommended)". Pass 3 is approved. The work is test-only.
+
+| Row | Input or state | Status | Outcome | Decided by / test |
+| :--- | :--- | :--- | :--- | :--- |
+| W17 | "On this machine": the test browser's GET of the callback fails (an error, or a status other than 200) | decided | the browser records the error and ends the sign-in by cancelling its context: `SignIn` returns `context.Canceled` within seconds, nothing is saved, and the test fails naming the GET's error, never after the SDK's 600 s | the owner's ruling above; `TestSignInBrowserFailureEndsTheSignIn` (a test transport that refuses every request; red: before pass 3, a failing GET hangs W2 until a bound `-timeout`), and W2 fails at once naming the error (`TestSignInAsksWhereTheBrowserIs`); plant P22 |
+
+* **P22** (the test browser, since no production line decides W17): the browser drops its GET's error again. `TestSignInBrowserFailureEndsTheSignIn` must fail, within its own 30 s bound, on the missing error and on the sign-in's end.
+
+*(Pass 3: the counts become 55 rows, 46 decided, 0 open.)*
