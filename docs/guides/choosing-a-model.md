@@ -68,6 +68,7 @@ max-out   128000
 input     text, image, pdf
 thinking  low, medium, high, xhigh, max
 cost      input $2, output $10, cache read $0.1, cache write $2.5, per million tokens
+data      models.dev, fetched 2026-11-25 09:30 UTC (3 hours ago)
 ```
 
 An id three providers have, with no credential set, needs its provider:
@@ -212,7 +213,52 @@ provider's, words after either filtering them, numbered as `/model` numbers them
 cannot use yet shows its state and the models gobble knows of it.
 
 `gobble models info <model>` takes what `--model` takes, and prints what gobble knows of that one
-model, as above.
+model, as above, its last line the model data it read.
+
+## Where the model facts come from
+
+A model's name, window, output limit, input kinds, thinking levels and prices come from
+[models.dev](https://models.dev)'s model data, which gobble keeps a copy of in its cache directory
+(`model-data/models-dev.json`, beside `attempt.json`, the last download any gobble started), with
+`models.json` above it ([guide](models-json.md)). Every run reads the copy when it starts and
+never waits for the network. A model call, `gobble models list` or `gobble models info` downloads it
+again in the background once it is `modelData.refreshHours` old (a day by default), never before
+the first prompt, and about once an hour at most: each gobble skips the download when any gobble
+finished one within the hour, or started one in the last two minutes that has not finished, but no
+lock stops two that start at the same moment, and a download cut short because gobble exited does
+not hold the next one back. An unchanged document costs a reply
+with no body. A download with no models is never kept, nor, against a copy
+from the same place, one that lacks a section the copy has or holds under half its models.
+Until gobble has a copy it reads the one built into it, and the data line says `none`.
+
+A session keeps the model data it started with, so a download during it changes none of its
+facts, nor what its requests read of them (the route an OpenCode model takes, a model's efforts); a
+session that started with none takes the first download, and its next prompt uses it. `/context`
+ends with it:
+
+```text
+Model data: models.dev, fetched 2026-11-25 09:30 UTC (3 hours ago)
+```
+
+Once the copy is older than `modelData.warnDays` (7 days by default), gobble warns once a run, with
+why the last download did not replace it:
+
+```text
+$ gobble models list
+Warning: model data was fetched 9 days ago from models.dev; gobble models refresh fetches it again; the last download failed: offline
+```
+
+`gobble models refresh` downloads it now, whatever its age, and says what it did; it exits 1 when
+it could not fetch, a check refused the download, or it could not save it, and the copy is then
+kept. `--force` saves a download a section or size check refused, but never one with no models:
+
+```text
+$ gobble models refresh
+Model data: fetched from models.dev at 2026-11-25 12:30 UTC: 782 models in 9 sections; it replaces the copy fetched 2026-11-24 08:10.
+```
+
+In `settings.yaml`, `modelData.refreshHours: 0` never downloads on its own (`gobble models refresh`
+still does), and `modelData.warnDays: 0` never warns; they can be at most 8760 and 3650.
 
 ## Completion
 

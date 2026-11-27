@@ -20,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -71,13 +72,13 @@ func newCompactHarnessWith(t *testing.T, cfg harnessConfig, settings SessionSett
 		p = cfg.wrap(h.script)
 	}
 	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models: func() ModelChoice {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			return ModelChoice{Provider: "fake", Models: slices.Clone(h.offered), Default: "m1"}
 		},
-		ModelInfo: func(provider, model string) llm.Model {
+		ModelInfo: func(_ *provider.ModelData, provider, model string) llm.Model {
 			m := compactModels[model]
 			m.Provider = provider
 			return m

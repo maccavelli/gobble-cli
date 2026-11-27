@@ -16,6 +16,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/mcpclient/mcptest"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
@@ -167,7 +168,7 @@ func widgetTool() tool.Tool {
 // joined to an approving client, which it returns too.
 func loadAgent(t *testing.T, dir string, p llm.Provider, tools []tool.Tool) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
 		Store: jsonl.New(dir, jsonl.Options{}), Tools: tools})
 	client := &acptest.Client{Allow: true}
 	c := acptest.Connect(t, ag, client)

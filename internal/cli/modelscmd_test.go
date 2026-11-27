@@ -106,7 +106,8 @@ func TestListModelsFlag(t *testing.T) {
 // gobble models info resolves as --model does and prints the model's facts:
 // each limit with its source, and whether the wire requires an output limit
 // (0066-MADR D5, S15, S16, S18; 0071-MADR P45, the owner's "Expect the new
-// output (Recommended)").
+// output (Recommended)"), and last the model data's line (0072-MADR M38, M81,
+// by the coordinator's Q-E on the same ruling; 2026-11-25).
 func TestModelsInfo(t *testing.T) {
 	c := listEnv(t)
 	r := c.run("models", "info", "custom-1")
@@ -120,6 +121,7 @@ thinking  off, minimal, low, medium, high
 limit     optional on its wire
 cost      input $1, output $2, cache read $0.5, cache write $0, per million tokens
 tier      above 100000: input $3, output $4, cache read $1, cache write $0
+data      none; models are unknown until gobble models refresh downloads them
 `
 	if r.code != ExitOK || r.stdout != want {
 		t.Errorf("exit %d, stdout:\n%s\nwant:\n%s", r.code, r.stdout, want)

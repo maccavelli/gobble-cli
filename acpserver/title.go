@@ -11,6 +11,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -18,9 +19,9 @@ import (
 // prompt (0005-PLAN F5-5). A zero TitleOptions names none.
 type TitleOptions struct {
 	// Provider builds the small model's provider for a session, with the
-	// session's id and retry settings, as Options.Provider builds the
-	// session's.
-	Provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	// session's models.dev document, id and retry settings, as
+	// Options.Provider builds the session's (0072-MADR D17, M86).
+	Provider func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error)
 	// ProviderID and Model are the small model, provider and id; Options'
 	// ModelInfo gives its levels, output limit and price.
 	ProviderID, Model string
@@ -179,14 +180,14 @@ func (s *liveSession) nameNow() string {
 // writeTitle asks the small model for s's title from prompt, records the
 // call's usage, and names s with it unless s was named meanwhile.
 func (a *Agent) writeTitle(ctx context.Context, s *liveSession, retry llm.Retry, prompt string) error {
-	p, err := a.titles.Provider(string(s.id), retry)
+	p, err := a.titles.Provider(a.dataOf(s), string(s.id), retry) // the session's document (0072-MADR M62, M86)
 	if err != nil {
 		return err
 	}
 	// The title waits for the title model's discovery, here in its own
 	// goroutine, bounded (0071-MADR P40).
 	a.waitDiscovery(ctx, s, a.titles.ProviderID, a.titles.Model)
-	info := a.info(a.titles.ProviderID, a.titles.Model)
+	info := a.modelOf(s, a.titles.ProviderID, a.titles.Model)
 	// The title's cap is min(128, C), C the streamed output a turn reads
 	// (0071-MADR V8; 0065-MADR's amendment of 2026-11-25).
 	maxTokens := titleMaxTokens

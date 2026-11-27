@@ -33,7 +33,7 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 	// --list-models is gobble models list, the prompt words its search, as
 	// Pi's --list-models [search] (0005-MADR; 0005-PLAN F4-2c).
 	if c.ListModels {
-		return e.printModels(strings.Join(c.Prompt, " "), "", false)
+		return e.listModelsCmd(strings.Join(c.Prompt, " "), "", false)
 	}
 	// The working directory comes first: the process settings, and so the
 	// built-in tools' options, are its (0018-PLAN P5 deviation 15).
@@ -74,6 +74,13 @@ func (c *ChatCmd) Run(k *kong.Context, e *runEnv) error {
 		return err
 	}
 	e.tools, e.mcpOff, e.mcpAllow, e.noGrants = choice.builtins, choice.mcpOff, choice.mcpAllow, choice.noGrants
+	// The model data's age, once, at the start; a headless run waits for a
+	// refresh under way at its end, the interactive CLI does not (0072-MADR
+	// D12, D13, D20).
+	e.warnModelDataAtStart(false)
+	if mode == ModePrint {
+		e.waitModelDataAtEnd()
+	}
 	if c.AddDir, err = resolveAddDirs(base, c.AddDir); err != nil {
 		return err
 	}

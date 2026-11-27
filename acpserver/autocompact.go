@@ -103,7 +103,7 @@ func (c *autoCompaction) compact(ctx context.Context, overflow bool, tools jsont
 		}
 		chosen, _ := a.choices(s)
 		used := a.contextEstimate(s, tools) // the output limit's estimate too (0071-MADR D3)
-		if !compaction.Over(used, a.modelOf(c.providerID, chosen).ContextWindow, settings) {
+		if !compaction.Over(used, a.modelOf(s, c.providerID, chosen).ContextWindow, settings) {
 			return nil, nil
 		}
 	}
@@ -177,7 +177,7 @@ func (a *Agent) summaryModel(s *liveSession, p llm.Provider, providerID string) 
 	chosen, think := a.choices(s)
 	prev, provider := lastAssistantModel(s.tree.Path())
 	if prev != "" && prev != chosen && provider == providerID && slices.Contains(a.modelsOf(providerID), prev) {
-		return a.compactionModel(s, p, providerID, prev, catalog.Clamp(a.levelsOf(providerID, prev), think))
+		return a.compactionModel(s, p, providerID, prev, catalog.Clamp(a.levelsOf(s, providerID, prev), think))
 	}
 	return a.compactionModel(s, p, providerID, chosen, think)
 }

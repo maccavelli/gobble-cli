@@ -30,13 +30,15 @@ const appName = "gobble"
 // first provider with a credential (0002-PLAN Phase 3, owner's decision of
 // 2026-10-05; 0019-MADR D15; 0005-PLAN F4-2c), its key found in Pi's order
 // and resolved now (0005-PLAN F4-3a), or its stored OAuth login (0005-PLAN
-// F4-3b). Each session's provider names the session (0021-MADR D4), and
-// retries as its settings say (0005-PLAN F5-1). Tests replace it.
-var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm.Provider, error) {
-	return func(sessionID string, retry llm.Retry) (llm.Provider, error) {
+// F4-3b). Each session's provider names the session (0021-MADR D4), retries
+// as its settings say (0005-PLAN F5-1), and is built with the session's
+// models.dev document, data, nil for none (0072-MADR D17, M86). Tests
+// replace it.
+var modelProvider = func(e *runEnv) func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error) {
+	return func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
 			Logins: e.logins(), Retry: &retry, Cache: &e.cache, Sessions: &e.sessions, // on every path (0046-MADR D7, D8)
-			Set: e.providerSet()}
+			Set: e.providerSet(), ModelData: data}
 		if sel, err := e.chooseWith(e.chosenProvider()); err == nil {
 			o = e.providerOptions(sel.ID, o) // models.json's base URL and headers (0005-PLAN F4-2b)
 			if src, ok := e.credentials().Has(sel.ID); ok {
@@ -50,12 +52,12 @@ var modelProvider = func(e *runEnv) func(sessionID string, retry llm.Retry) (llm
 
 // providerFor builds provider id's model for a session switched to it, as
 // modelProvider builds the run's: its key in Pi's order or its stored
-// login, models.json's base URL and headers, and the session's id and
-// retry settings (0025-MADR D1). Tests replace it.
-var providerFor = func(e *runEnv) func(id, sessionID string, retry llm.Retry) (llm.Provider, error) {
-	return func(id, sessionID string, retry llm.Retry) (llm.Provider, error) {
+// login, models.json's base URL and headers, and the session's document,
+// id and retry settings (0025-MADR D1; 0072-MADR M86). Tests replace it.
+var providerFor = func(e *runEnv) func(data *provider.ModelData, id, sessionID string, retry llm.Retry) (llm.Provider, error) {
+	return func(data *provider.ModelData, id, sessionID string, retry llm.Retry) (llm.Provider, error) {
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
-			Logins: e.logins(), Retry: &retry}
+			Logins: e.logins(), Retry: &retry, ModelData: data}
 		o = e.providerOptions(id, o)
 		if src, ok := e.credentials().Has(id); ok {
 			o.CredentialSource = string(src)
@@ -118,9 +120,11 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		e.log().Warn("model catalog", slog.Any("error", err))
 	}
 	return acpserver.Options{
-		Version:     identity().Version,
-		Provider:    modelProvider(e),
-		ProviderFor: providerFor(e),
+		Version: identity().Version,
+		// Each model call first starts the automatic refresh of the model
+		// data when it is due (0072-MADR D8, M24).
+		Provider:    e.refreshingBuild(modelProvider(e)),
+		ProviderFor: e.refreshingFor(providerFor(e)),
 		Models:      e.modelChoice,
 		// The recent models, and a live listing's facts, then the id search,
 		// for /model with words (0025-MADR D3, D5; 0036-MADR D6).
@@ -138,18 +142,28 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		// What the catalog knows of a model, with the provider's key or login,
 		// found as modelProvider finds it, for its listing (0005-PLAN F4-2a,
 		// F4-3a, F4-3b).
-		ModelInfo: func(id, model string) llm.Model {
-			return modelFacts(e.lookupOptions(id), id, model, e.modelsJSON())
+		// The session's models.dev document, nil for the current one
+		// (0072-MADR D19, M80).
+		ModelInfo: func(data *provider.ModelData, id, model string) llm.Model {
+			o := e.lookupOptions(id)
+			o.ModelData = data
+			return modelFacts(o, id, model, e.modelsJSON())
+		},
+		// Each session takes the current copy at its start, and /context
+		// shows the line for its own (0072-MADR D12, D19).
+		ModelData: currentCopy,
+		ModelDataLine: func(data *provider.ModelData) string {
+			return modelDataLine(data, modelDataNow(), e.modelDataSettings().WarnDays)
 		},
 		// The limits cached now, for the model option's descriptions: no
 		// request, a login's token not asked; models.json's base URL, which
 		// the saved caps are matched on, and headers, as the lookups read
 		// with (0066-MADR D6; 0071-MADR P46, P47).
-		CachedLimits: func(id, model string) llm.Limits {
+		CachedLimits: func(data *provider.ModelData, id, model string) llm.Limits {
 			mj := e.modelsJSON()
 			o := provider.Options{APIKey: e.knownKey(id), Workspace: e.knownWorkspace(id), BaseURL: mj.BaseURL(id),
 				Headers: e.headersFor(mj, id), Cache: &e.cache, Set: e.providerSet(), ClientName: appName,
-				ClientVersion: identity().Version, Observations: e.providerObservations(id)}
+				ClientVersion: identity().Version, Observations: e.providerObservations(id), ModelData: data}
 			return cachedLimits(o, id, model, e.modelsJSON())
 		},
 		// The caps services state, kept a day, and a completed call's output,
@@ -157,9 +171,12 @@ func (e *runEnv) agentOptions() acpserver.Options {
 		SaveObservation: e.rememberObservation,
 		CallOutput:      e.dropExceeded,
 		// Each session's model's limits, discovered when it is set, with
-		// what the lookup reads with (0066-MADR D1; 0071-MADR P37).
-		Discover: func(ctx context.Context, id, model string) error {
-			return discoverLimits(ctx, e.lookupOptions(id), id, model, e.modelsJSON())
+		// what the lookup reads with, the session's document among it
+		// (0066-MADR D1; 0071-MADR P37; 0072-MADR D17).
+		Discover: func(ctx context.Context, data *provider.ModelData, id, model string) error {
+			o := e.lookupOptions(id)
+			o.ModelData = data
+			return discoverLimits(ctx, o, id, model, e.modelsJSON())
 		},
 		// --model and --thinking win over every session's own (0005-PLAN F4-2c).
 		Override: acpserver.Override{Provider: e.pick.Provider, Model: e.pick.Model, Thinking: e.pick.Thinking, Mode: e.mode},

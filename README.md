@@ -104,6 +104,10 @@ Early, and built in the order [docs/README.md](docs/README.md#build-order) gives
   ([guide](docs/guides/models-json.md#the-output-limit)).
 - **Choosing a model:** `--model` and `--provider` by Pi's rules, `--thinking` up to `max`, the
   `defaultModel` setting, and `gobble models list|info` ([guide](docs/guides/choosing-a-model.md)).
+- **Model data:** gobble keeps a copy of [models.dev](https://models.dev)'s model data (names, windows, output
+  limits, prices) in its cache directory, downloads it again in the background once it is a day old, and shows its
+  age in `/context` and `gobble models info`; `gobble models refresh [--force]` downloads it now
+  ([guide](docs/guides/choosing-a-model.md#where-the-model-facts-come-from)).
 - **Browsing providers and catalogs:** `gobble providers [--check] [--json]` lists every provider with its
   credential's source and how to sign in, and with `--check` its state; `gobble models list --provider ID`
   and `--all` show a provider's catalog, the models gobble knows of one with no credential marked so. In a

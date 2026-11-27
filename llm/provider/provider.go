@@ -54,8 +54,11 @@ type Options struct {
 	// ModelData is the models.dev document List ranks by and reads its
 	// menu's facts from; nil hands none, and the listing ranks by the SDK's
 	// curated order and name rules. FetchModelData takes its validators
-	// from it. New and the lookups do not read it: the lookups read
-	// CurrentModelData (0071-MADR P3, P6; 0072-MADR D4, D7).
+	// from it. The lookups (ModelInfoWith, CachedLimits, Discover) are
+	// handed it, a session's document, by catalog.WithMetadata, and nil
+	// there is CurrentModelData. New hands it to the provider for its
+	// requests, and nil there is none (0071-MADR P3, P6; 0072-MADR D4, D7,
+	// D17, D19, M55, M62, M80, M86).
 	ModelData *ModelData
 	// SessionID names the conversation: the routing key a cached request
 	// carries, and OpenCode's and Kilo's session headers (0021-MADR D4).
@@ -221,8 +224,9 @@ func withHeaders(c *http.Client, headers func(ctx context.Context, model string)
 // New builds the SDK provider id with o, wrapped in the SDK's retry, as an
 // llm.Provider. Construction makes no network call: model probes are off
 // (0005-MADR), and the SDK fetches no model metadata from v1.33.0. New
-// hands the provider no models.dev document (0071-MADR P2, P6), and, as its
-// one layer, o.Observations, the caps services stated on earlier runs
+// hands the provider o.ModelData, the session's models.dev document, by
+// catalog.WithMetadata, nil handing none (0072-MADR D17, M62, M86), and, as
+// its one layer, o.Observations, the caps services stated on earlier runs
 // (0071-MADR P24).
 func New(id string, o Options) (llm.Provider, error) {
 	opts := []llmprovider.Option{
@@ -250,9 +254,14 @@ func New(id string, o Options) (llm.Provider, error) {
 	}
 	if saved := savedLayer(o, id); saved != nil {
 		// The caps services stated on earlier runs, as a caller's layer
-		// (0071-MADR P24); New hands no other layer.
+		// (0071-MADR P24), beside the document (0072-MADR M76); New hands no
+		// other layer.
 		opts = append(opts, catalog.WithModelLayer(saved))
 	}
+	// The session's models.dev document, for the provider's requests, its
+	// whole life: OpenCode's route, the efforts, the replay field, a limit
+	// the request names none of (0072-MADR D17, M62, M73; 0093-MADR Q4).
+	opts = append(opts, o.ModelData.options()...)
 	if o.Logger != nil {
 		opts = append(opts, llmprovider.WithLogger(o.Logger))
 	}

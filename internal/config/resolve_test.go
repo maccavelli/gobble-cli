@@ -105,8 +105,8 @@ func TestKeysMatchSettings(t *testing.T) {
 			t.Errorf("%s: Value = %v %v, want %v", k.Path, v, ok, defaultValue(k))
 		}
 	}
-	if len(Keys) != 33 {
-		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel, F6-1's defaultProjectTrust, F6-2's permissions.rules, F6-4's permissions.allowBypass, 0022-PLAN P3's two personality keys, 0036-PLAN P7's images.autoResize and 0070-MADR D12's retry.retryAfterCut", len(Keys))
+	if len(Keys) != 35 {
+		t.Errorf("%d keys, want 0018-MADR D14's 13, 0019-MADR D15's defaultProvider, 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's five retry keys, F5-2's four compaction keys, F5-5's smallModel, F6-1's defaultProjectTrust, F6-2's permissions.rules, F6-4's permissions.allowBypass, 0022-PLAN P3's two personality keys, 0036-PLAN P7's images.autoResize, 0070-MADR D12's retry.retryAfterCut and 0072-MADR D11's modelData.refreshHours and modelData.warnDays", len(Keys))
 	}
 }
 

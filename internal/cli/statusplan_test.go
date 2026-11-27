@@ -273,9 +273,9 @@ func TestForeignOpenAISessionRefused(t *testing.T) {
 		has = e.authOptions().Has("openai")
 		sel, err := provider.ChooseWith(nil, e.hasCredential, "")
 		chosen = err == nil && sel.ID == "openai"
-		_, err = modelProvider(e)("session-1", llm.Retry{})
+		_, err = modelProvider(e)(nil, "session-1", llm.Retry{})
 		built = err == nil
-		_, err = providerFor(e)("openai", "session-2", llm.Retry{})
+		_, err = providerFor(e)(nil, "openai", "session-2", llm.Retry{})
 		builtFor = err == nil
 		return status, check, has, chosen, built, builtFor
 	}

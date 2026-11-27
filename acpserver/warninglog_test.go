@@ -9,6 +9,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // warnRecords is a slog handler that counts the "model warning" records
@@ -54,7 +55,7 @@ func TestSessionWarningLogIsPerSession(t *testing.T) {
 	logs := &warnRecords{}
 	script := llmtest.NewScript(effortTurn(), effortTurn(), effortTurn())
 	ag := New(Options{Version: "1.2.3", Models: func() ModelChoice { return testModels },
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return script, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return script, nil },
 		Logger:   slog.New(logs)})
 	c := acptest.Connect(t, ag, &acptest.Client{})
 	ag.SetConnection(c.Agent)

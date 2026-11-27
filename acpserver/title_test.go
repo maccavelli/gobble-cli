@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
@@ -55,10 +56,10 @@ func newTitleHarness(t *testing.T, dir string, main *llmtest.Script, small llm.P
 	h := &titleHarness{client: &acptest.Client{}, main: main, logs: &syncBuffer{}}
 	var title TitleOptions
 	if small != nil {
-		title = TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
+		title = TitleOptions{Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
 	}
 	o := Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return main, nil }, Title: title,
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return main, nil }, Title: title,
 		Logger: slog.New(slog.NewTextHandler(h.logs, nil))}
 	for _, f := range with {
 		f(&o)
@@ -156,7 +157,7 @@ func TestTitleCapUnchanged_0071(t *testing.T) {
 	small := llmtest.NewScript(llmtest.Text("A title"))
 	main := llmtest.NewScript(llmtest.Text("ok"))
 	h := newTitleHarness(t, t.TempDir(), main, small, func(o *Options) {
-		o.ModelInfo = func(provider, model string) llm.Model {
+		o.ModelInfo = func(_ *provider.ModelData, provider, model string) llm.Model {
 			return llm.Model{Provider: provider, ID: model, ContextWindow: 200000, MaxTokens: 8192}
 		}
 	})
@@ -248,8 +249,10 @@ func TestTitleOnce(t *testing.T) {
 	small := llmtest.NewScript(llmtest.Turn{Err: errors.New("the small model failed")}, llmtest.Text("Twice"))
 	client := &acptest.Client{}
 	ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}), Models: func() ModelChoice { return testModels },
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return nil, errors.New("no provider") },
-		Title:    TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}})
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
+			return nil, errors.New("no provider")
+		},
+		Title: TitleOptions{Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}})
 	c := acptest.Connect(t, ag, client)
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() {

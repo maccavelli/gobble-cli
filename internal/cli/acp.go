@@ -40,6 +40,7 @@ func (c *ACPCmd) Run(e *runEnv) error {
 	if err := c.choose(e); err != nil {
 		return err
 	}
+	e.warnModelDataAtStart(true) // the model data's age, in the log alone (0072-MADR D12, D13)
 	// The process keys come from the global file and --set only: a
 	// project's do not apply under acp (0018-MADR D16). builtin's own
 	// output directory stays, as it is today (0018-PLAN P5 deviation 16).

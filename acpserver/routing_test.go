@@ -12,6 +12,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
 )
@@ -23,7 +24,7 @@ var fsAndTerminal = acp.ClientCapabilities{Fs: acp.FileSystemCapabilities{ReadTe
 // caps at initialize, in a new working directory it returns.
 func routingSession(t *testing.T, p llm.Provider, client *acptest.Client, caps acp.ClientCapabilities, tools []tool.Tool) (*acptest.Conn, acp.SessionId, string) {
 	t.Helper()
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil }, Tools: tools})
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil }, Tools: tools})
 	c := acptest.Connect(t, ag, client)
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() {

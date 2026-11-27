@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -186,7 +187,7 @@ func (n *jsontextNumber) UnmarshalJSON(b []byte) error { *n = jsontextNumber(b);
 func TestMcremoteScript(t *testing.T) {
 	model := llmtest.NewScript()
 	call, stop := rawServe(t, Options{Version: "1.2.3", NewID: counterIDs(),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }})
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }})
 	for i, step := range []struct{ method, params string }{
 		{"initialize", `{"protocolVersion":1,"clientCapabilities":{}}`},
 		{"session/new", `{"cwd":` + jsonString(acptest.Abs("/w")) + `,"mcpServers":[]}`},

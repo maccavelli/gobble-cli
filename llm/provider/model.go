@@ -56,7 +56,8 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 }
 
 // ModelInfoWith is ModelInfo with o's key, workspace, logins and sessions,
-// and o's transport and cache: a listing it starts in the background runs
+// o's document (o.ModelData: a session's; nil reads the current one,
+// 0072-MADR D19, M80), and o's transport and cache: a listing it starts in the background runs
 // through o.Cache when set, so the run that owns the cache ends it, and a
 // login's refresh is on the run's session (0046-MADR D7, D8). With a
 // ClientName, the lookup names that application and ClientVersion to the SDK,
@@ -68,7 +69,7 @@ func ModelInfo(id, apiKey, workspace string, logins LoginStore, model string, mj
 func ModelInfoWith(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Model {
 	ctx := context.Background()
 	src, workspace, sdk := lookupSource(ctx, o, id)
-	return modelInfoFrom(ctx, id, src, workspace, model, mj, o.ClientName, o.ClientVersion, savedLayer(o, id), sdk...)
+	return modelInfoFrom(ctx, id, src, workspace, model, mj, o.ClientName, o.ClientVersion, o.ModelData, savedLayer(o, id), sdk...)
 }
 
 // lookupSource is what a lookup of provider id under o reads with: the
@@ -104,22 +105,24 @@ func limitsSource(id string, src llmprovider.TokenSource) llmprovider.TokenSourc
 // own requests, read what the service states (0066-MADR D1, as amended
 // 2026-11-25). It reads with what ModelInfoWith reads with: o's credential,
 // transport, base URL, cache and set, the Claude workspace, gobble's name and
-// version, the current document as the "models.dev" layer, o's saved caps
-// as the "service-stated" layer above it, and models.json above both
-// (0071-MADR P24). It passes no Kilo organization (0066-MADR S43). The SDK
+// version, o's document (o.ModelData, else the current one) handed in by
+// catalog.WithMetadata (0072-MADR M55), o's saved caps as the
+// "service-stated" layer, and models.json above it (0071-MADR P24). It passes no Kilo organization (0066-MADR S43). The SDK
 // bounds it at 10 seconds; ctx ends it sooner. Its error is each source's
 // failure, joined; what the other sources gave is kept either way, and a
 // lookup reads it.
 func Discover(ctx context.Context, o Options, id, model string, mj *gcatalog.ModelsJSON) error {
 	src, workspace, sdk := lookupSource(ctx, o, id)
+	sdk = append(sdk, documentOf(o.ModelData).options()...)
 	opts := lookupOptions(workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj, savedLayer(o, id))...)
 	_, err := lookupLimits(ctx, llmprovider.ProviderID(id), limitsSource(id, src), model, opts...)
 	return err
 }
 
 // CachedLimits are model's limits on provider id as they are cached now,
-// with what a lookup reads with (the layers, o's saved caps among them, the
-// run's cache and set, a Claude key's workspace), as the SDK's
+// with what a lookup reads with (o's document, handed in, the saved caps' and
+// models.json's layers, the run's cache and set, a Claude key's workspace),
+// as the SDK's
 // catalog.CachedLimits reads them: it starts no request. A key's token keys
 // the cached listing; a stored login's is not asked, since it may refresh,
 // so a provider signed in with one reads the layers alone (0066-MADR D6,
@@ -131,6 +134,7 @@ func CachedLimits(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Limi
 	if o.APIKey != "" {
 		src = llmprovider.NewStaticToken(o.APIKey)
 	}
+	sdk = append(sdk, documentOf(o.ModelData).options()...)
 	opts := lookupOptions(o.Workspace, o.ClientName, o.ClientVersion, sdk, lookupLayers(mj, savedLayer(o, id))...)
 	if ls := limitsSource(id, src); ls != nil {
 		opts = append(opts, llmprovider.WithTokenSource(ls))
@@ -142,15 +146,23 @@ func CachedLimits(o Options, id, model string, mj *gcatalog.ModelsJSON) llm.Limi
 // the options discovery hands it.
 var lookupLimits = catalog.LookupLimits
 
-// lookupLayers are a lookup's layers: the current document
-// (CurrentModelData), when there is one, never two (0072-MADR M19); saved, the caps services stated on earlier runs, when not nil,
-// above it; then models.json, when mj is not nil, above both (0071-MADR
-// P21, P24).
+// documentOf is the document a lookup reads: data, a session's, else the
+// current one (CurrentModelData), never two (0072-MADR M19, D19, M80). It is
+// handed to the SDK by catalog.WithMetadata, the hand-in, not as a layer
+// (0072-MADR D17, M55; 0093-MADR D1 at go-llmprovider-sdk v1.33.0).
+func documentOf(data *ModelData) *ModelData {
+	if data == nil {
+		return CurrentModelData()
+	}
+	return data
+}
+
+// lookupLayers are a lookup's caller layers: saved, the caps services stated
+// on earlier runs, when not nil; then models.json, when mj is not nil, above
+// it (0071-MADR P21, P24). The models.dev document is not a layer: documentOf
+// hands it in (0072-MADR M55, M75).
 func lookupLayers(mj *gcatalog.ModelsJSON, saved catalog.Layer) []catalog.Layer {
 	var layers []catalog.Layer
-	if d := CurrentModelData(); d != nil {
-		layers = append(layers, d.doc.meta)
-	}
 	if saved != nil {
 		layers = append(layers, saved)
 	}
@@ -167,15 +179,17 @@ func ModelInfoContext(ctx context.Context, id, apiKey, model string, mj *gcatalo
 	if apiKey != "" {
 		src = llmprovider.NewStaticToken(apiKey)
 	}
-	return modelInfoFrom(ctx, id, src, "", model, mj, "", "", nil)
+	return modelInfoFrom(ctx, id, src, "", model, mj, "", "", nil, nil)
 }
 
 // modelInfoFrom is ModelInfoContext with src, the credential's token source, or
 // nil for none, a Claude key's workspace, the application's name and version
-// (clientName empty names none), saved, the saved caps' layer or nil, and
-// sdk, the SDK options a listing it starts takes (0046-MADR D7; 0071-MADR
-// P24).
-func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, saved catalog.Layer, sdk ...llmprovider.Option) llm.Model {
+// (clientName empty names none), data, the document, handed in (nil: the
+// current one), saved, the saved caps' layer or nil, and sdk, the SDK
+// options a listing it starts takes (0046-MADR D7; 0071-MADR P24; 0072-MADR
+// M55, M80).
+func modelInfoFrom(ctx context.Context, id string, src llmprovider.TokenSource, workspace, model string, mj *gcatalog.ModelsJSON, clientName, clientVersion string, data *ModelData, saved catalog.Layer, sdk ...llmprovider.Option) llm.Model {
+	sdk = append(slices.Clone(sdk), documentOf(data).options()...)
 	m := lookupModelWith(ctx, id, src, model, workspace, clientName, clientVersion, sdk, lookupLayers(mj, saved)...)
 	if mj == nil {
 		return capSourced(m, gcatalog.Facts{})

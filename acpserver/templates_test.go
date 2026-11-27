@@ -13,6 +13,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -23,7 +24,7 @@ import (
 // warnings go to logs.
 func templateAgent(t *testing.T, dir, cfg string, p llm.Provider, logs *bytes.Buffer) (*acptest.Conn, *acptest.Client) {
 	t.Helper()
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil }, Models: func() ModelChoice { return testModels },
 		Store: jsonl.New(dir, jsonl.Options{}), Tools: []tool.Tool{builtin.Read()}, Prompt: PromptOptions{ConfigDir: cfg},
 		Logger: slog.New(slog.NewTextHandler(logs, nil))})
 	client := &acptest.Client{Allow: true}

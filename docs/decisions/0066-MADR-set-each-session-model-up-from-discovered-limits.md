@@ -122,6 +122,10 @@ relies on its (2)), reads one model per session rather than every listed model
   the SDK reads models.dev itself and embeds its own limits-only extract below
   the live listings (go-llmprovider-sdk 0089 D3). The snapshot stays gobble's
   catalogue for its other facts.
+  *(2026-11-25, 0072-MADR D16: superseded by 0072's Q1, "make models.dev the source-of-truth for both the SDK
+  and gobble.": from 0072-PLAN's Phase 2b the session's models.dev document is handed to the SDK's lookups and
+  limits by `catalog.WithMetadata` (0072-MADR M55), and from its Phase 2 the lookups read the session's
+  document, not the snapshot alone (M80).)*
 * **D4. `llm.Model` carries the evidence.** It gains `Limits`, with `Output`,
   `Window` and `Input`, each `{Tokens, Known, Conflicting, Source, Stale,
   Others}` from the SDK's `Fact` and `Evidence`, and `Required`; its

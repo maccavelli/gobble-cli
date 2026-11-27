@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -24,7 +25,7 @@ import (
 func rulesAgent(t *testing.T, p llm.Provider, client *acptest.Client, ss SessionSettings, tools []tool.Tool) (*acptest.Conn, *syncBuffer) {
 	t.Helper()
 	logs := &syncBuffer{}
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Tools: tools, Settings: func(string) SessionSettings { return ss }, Logger: slog.New(slog.NewTextHandler(logs, nil))})
 	c := acptest.Connect(t, a, client)
 	a.SetConnection(c.Agent)

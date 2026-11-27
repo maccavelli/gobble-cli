@@ -96,11 +96,11 @@ func TestRunOptionsCarryTheSessions(t *testing.T) {
 		return nil, provider.Selection{}, errors.New("recorded")
 	}
 	t.Cleanup(func() { ambientProvider = old })
-	_, _ = modelProvider(e)("s1", llm.DefaultRetry) // no credential: no provider is chosen
+	_, _ = modelProvider(e)(nil, "s1", llm.DefaultRetry) // no credential: no provider is chosen
 	t.Setenv("OPENAI_API_KEY", "test-only")
 	e.refreshCredentials("openai")
-	_, _ = modelProvider(e)("s2", llm.DefaultRetry)
-	_, _ = providerFor(e)("openai", "s3", llm.DefaultRetry)
+	_, _ = modelProvider(e)(nil, "s2", llm.DefaultRetry)
+	_, _ = providerFor(e)(nil, "openai", "s3", llm.DefaultRetry)
 	if len(built) != 3 {
 		t.Errorf("%d providers built, want 3", len(built))
 	}
@@ -119,7 +119,7 @@ func TestRunOptionsCarryTheSessions(t *testing.T) {
 		return llm.Model{Provider: id, ID: model}
 	}
 	t.Cleanup(func() { modelFacts = oldFacts })
-	_ = e.agentOptions().ModelInfo("openai", "gpt-5-nano")
+	_ = e.agentOptions().ModelInfo(nil, "openai", "gpt-5-nano")
 	if facts != want {
 		t.Errorf("the ModelInfo hook's sessions %p, want the run's %p", facts, want)
 	}

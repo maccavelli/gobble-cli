@@ -483,8 +483,10 @@ func newSIEnv(t *testing.T, s siSpec) *siEnv {
 		},
 	}
 	o := Options{Version: "1.2.3", Auth: auth, Logger: slog.New(slog.NewTextHandler(e.log, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("ok")), nil },
-		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}}
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
+			return llmtest.NewScript(llmtest.Text("ok")), nil
+		},
+		Prompt: PromptOptions{GOOS: "linux", cwd: "/work"}}
 	if s.opts != nil {
 		s.opts(&o)
 	}
@@ -1640,8 +1642,10 @@ func TestAuthenticateRelayEndsItsFormWithoutTheSDK(t *testing.T) {
 		},
 	}
 	o := Options{Version: "1.2.3", Auth: auth, Logger: slog.New(slog.DiscardHandler),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(llmtest.Text("ok")), nil },
-		Prompt:   PromptOptions{GOOS: "linux", cwd: "/work"}}
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
+			return llmtest.NewScript(llmtest.Text("ok")), nil
+		},
+		Prompt: PromptOptions{GOOS: "linux", cwd: "/work"}}
 	agent := New(o)
 	detach := acp.WithReceivingMiddleware(func(next acp.MethodHandler) acp.MethodHandler { return detachAuthenticate(next) })
 	toAgentR, toAgentW := io.Pipe()

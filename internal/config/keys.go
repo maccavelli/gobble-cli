@@ -71,8 +71,8 @@ var queueModes = []string{"one-at-a-time", "all"}
 // 0021-MADR D3's cacheRetention, 0005-PLAN F4-2c's defaultModel, F5-1's
 // retry keys, F5-2's compaction keys, F5-5's smallModel, F6-1's
 // defaultProjectTrust, F6-2's permissions.rules, 0022-PLAN P3's
-// personality keys and 0036-PLAN P7's images.autoResize, in the template's
-// order. Every other part of the package reads them; a key added here
+// personality keys, 0036-PLAN P7's images.autoResize and 0072-MADR D11's
+// two modelData keys, in the template's order. Every other part of the package reads them; a key added here
 // without its template block, schema or Settings field fails the package's
 // tests.
 var Keys = []Key{
@@ -140,6 +140,10 @@ var Keys = []Key{
 		Doc: "How long, in milliseconds, after the grace before a stdio MCP server is killed."},
 	{Path: "images.autoResize", Kind: KindBool, Default: boolTrue, Read: ReadSession,
 		Doc: "Whether an image is resized before it is sent: at most 2000 by 2000 pixels and 4.5 MB of base64, as PNG or JPEG. Off sends an image unchanged when it is within that size, and a note when it is not."},
+	{Path: "modelData.refreshHours", Kind: KindInt, Default: "24", Min: 0, Max: 8760, Scope: ScopeGlobalOnly, Read: ReadProcess,
+		Doc: "How old, in hours, gobble's copy of models.dev's model data may grow before a model call or a models command downloads it again, in the background; 0 never downloads it on its own, and gobble models refresh still does."},
+	{Path: "modelData.warnDays", Kind: KindInt, Default: "7", Min: 0, Max: 3650, Scope: ScopeGlobalOnly, Read: ReadProcess,
+		Doc: "How old, in days, the model data may grow before a run warns, once, that it is old; 0 never warns."},
 	{Path: "externalEditor", Kind: KindCommand, Read: ReadProcess,
 		Doc: "The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over it; it wins over VISUAL and EDITOR."},
 }

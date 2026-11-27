@@ -20,6 +20,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
@@ -32,7 +33,7 @@ func sessionAgent(t *testing.T, dir string, p llm.Provider, client acp.Client) (
 	t.Helper()
 	ag := New(Options{
 		Version:  "1.2.3",
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models:   func() ModelChoice { return testModels },
 		Store:    jsonl.New(dir, jsonl.Options{}),
 	})
@@ -384,7 +385,7 @@ func TestResultWrittenBeforeItsUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := llmtest.NewScript(llmtest.ToolCall("t1", "read", `{"path":"a.txt"}`), llmtest.Text("ok"))
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil }, Store: jsonl.New(dir, jsonl.Options{})})
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil }, Store: jsonl.New(dir, jsonl.Options{})})
 	toAgentR, toAgentW := io.Pipe()
 	toClientR, toClientW := io.Pipe()
 	check := &checkingWriter{w: toClientW, dir: dir, checked: map[string]bool{}}
@@ -418,7 +419,7 @@ func TestResultWrittenBeforeItsUpdate(t *testing.T) {
 func TestNoFileWithoutConversation(t *testing.T) {
 	dir, cwd := t.TempDir(), t.TempDir()
 	ag := New(Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}),
-		Provider: func(string, llm.Retry) (llm.Provider, error) {
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
 			return nil, fmt.Errorf("%w: no model credential", llm.ErrAuth)
 		}})
 	c := acptest.Connect(t, ag, &acptest.Client{})

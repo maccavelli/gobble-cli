@@ -283,6 +283,28 @@
       },
       "additionalProperties": false
     },
+    "modelData": {
+      "type": "object",
+      "properties": {
+        "refreshHours": {
+          "type": "integer",
+          "description": "How old, in hours, gobble's copy of models.dev's model data may grow before a model call or a models command downloads it again, in the background; 0 never downloads it on its own, and gobble models refresh still does.",
+          "default": 24,
+          "minimum": 0,
+          "maximum": 8760,
+          "x-gobble-global-only": true
+        },
+        "warnDays": {
+          "type": "integer",
+          "description": "How old, in days, the model data may grow before a run warns, once, that it is old; 0 never warns.",
+          "default": 7,
+          "minimum": 0,
+          "maximum": 3650,
+          "x-gobble-global-only": true
+        }
+      },
+      "additionalProperties": false
+    },
     "externalEditor": {
       "type": "string",
       "description": "The editor /edit and gobble config edit open. GOBBLE_EDITOR wins over it; it wins over VISUAL and EDITOR.",

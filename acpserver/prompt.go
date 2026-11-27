@@ -344,7 +344,7 @@ func acpUsage(u llm.Usage) *acp.Usage { //nolint:staticcheck // as the lint:igno
 // model is priced (0005-PLAN F4-2a).
 func (a *Agent) contextUpdate(s *liveSession, used int) acp.SessionUpdate {
 	model, _ := a.choices(s)
-	info := a.modelOf(a.provOf(s), model)
+	info := a.modelOf(s, a.provOf(s), model)
 	up := acp.UpdateUsage(count(int64(used)), count(int64(info.ContextWindow)))
 	if info.Priced {
 		up.UsageUpdate.Cost = &acp.Cost{Amount: sessionTotals(s.log.Entries()).cost, Currency: "USD"}

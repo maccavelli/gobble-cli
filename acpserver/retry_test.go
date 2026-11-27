@@ -18,6 +18,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -49,7 +50,7 @@ func newRetryAgent(t *testing.T, p llm.Provider, settings func(string) SessionSe
 	t.Helper()
 	r := &retryAgent{client: &acptest.Client{}}
 	ag := New(Options{Version: "1.2.3", Models: func() ModelChoice { return testModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider: func(_ string, retry llm.Retry) (llm.Provider, error) {
+		Provider: func(_ *provider.ModelData, _ string, retry llm.Retry) (llm.Provider, error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			r.built = append(r.built, retry)

@@ -29,17 +29,21 @@ func (e *runEnv) titleOptions() acpserver.TitleOptions {
 
 // smallProvider builds the small model's provider for a session, as
 // modelProvider builds the session's: the provider's credential or login,
-// models.json's base URL and headers, the session's id and retry settings.
-// Tests replace it.
-var smallProvider = func(e *runEnv, id, model string) func(sessionID string, retry llm.Retry) (llm.Provider, error) {
-	return func(sessionID string, retry llm.Retry) (llm.Provider, error) {
+// models.json's base URL and headers, the session's models.dev document, id
+// and retry settings (0072-MADR D17, M86). Tests replace it.
+var smallProvider = func(e *runEnv, id, model string) func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error) {
+	return func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error) {
 		key, _ := e.credentialKey(id) //nolint:errcheck // titleOptions found a credential; a login has no key
 		o := provider.Options{ClientName: appName, ClientVersion: identity().Version, Logger: e.log(), SessionID: sessionID,
-			Logins: e.logins(), Retry: &retry, APIKey: key, Model: model}
+			Logins: e.logins(), Retry: &retry, APIKey: key, Model: model, ModelData: data}
 		o = e.providerOptions(id, o)
 		if src, ok := e.credentials().Has(id); ok {
 			o.CredentialSource = string(src)
 		}
-		return provider.New(id, o)
+		return newSmallProvider(id, o)
 	}
 }
+
+// newSmallProvider is provider.New, for the small model; a test replaces it
+// to see the options it is given (0072-MADR M86).
+var newSmallProvider = provider.New

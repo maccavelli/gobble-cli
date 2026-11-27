@@ -281,7 +281,7 @@ func (a *Agent) usageText(s *liveSession, voice *personality.Voice, entries []se
 	tot.tokenLines(&b)
 	model, _ := a.choices(s)
 	prov := a.provOf(s)
-	if info := a.modelOf(prov, model); info.Priced {
+	if info := a.modelOf(s, prov, model); info.Priced {
 		fmt.Fprintf(&b, "Cost: $%.3f\n", tot.cost)
 	} else {
 		name := "no model"
@@ -300,7 +300,8 @@ func (a *Agent) usageText(s *liveSession, voice *personality.Voice, entries []se
 
 // cmdContext is /context and /session: Pi's Session Info, with the mode,
 // the model and the context's use, the same figure as the last
-// usage_update, then the output limit (0071-MADR D10).
+// usage_update, then the output limit (0071-MADR D10), then the session's
+// model data (0072-MADR D12).
 func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	s := t.s
 	st := s.state()
@@ -328,12 +329,13 @@ func (a *Agent) cmdContext(_ context.Context, t *cmdTurn, _ string) error {
 	b.WriteString("Tokens\n")
 	tot.tokenLines(&b)
 	used := a.usedOf(s)
-	if window := a.modelOf(prov, model).ContextWindow; window > 0 {
+	if window := a.modelOf(s, prov, model).ContextWindow; window > 0 {
 		fmt.Fprintf(&b, "\nContext: %s of %s tokens (%.1f%%)\n", thousands(int64(used)), thousands(int64(window)), percentOf(used, window))
 	} else {
 		fmt.Fprintf(&b, "\nContext: %s tokens (estimated) of an unknown window\n", thousands(int64(used)))
 	}
 	b.WriteString(a.outputLimitLine(s, prov, model))
+	b.WriteString(a.modelDataLine(s)) // the session's model data (0072-MADR D12)
 	t.say(b.String())
 	return nil
 }
@@ -372,7 +374,7 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 		model, _ := a.choices(t.s)
 		t.say(t.text(personality.ModelCurrent, personality.Args{argModel: refOf(c.Provider, model)}) + "\n" +
 			t.text(personality.ModelList, personality.Args{argModels: countModels(picks)}) + "\n" +
-			a.pickerText(c, picks, func(int) bool { return true }))
+			a.pickerText(t.s, c, picks, func(int) bool { return true }))
 		return nil
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
@@ -411,10 +413,10 @@ func (a *Agent) cmdModel(ctx context.Context, t *cmdTurn, arg string) error {
 	if len(exact) == 1 {
 		return a.switchModel(ctx, t, c, exact[0].provider, exact[0].model, save)
 	}
-	keep := a.matches(picks, arg)
+	keep := a.matches(t.s, picks, arg)
 	for i := range picks {
 		if keep(i) {
-			t.say(a.pickerText(c, picks, keep))
+			t.say(a.pickerText(t.s, c, picks, keep))
 			return nil
 		}
 	}
@@ -438,7 +440,7 @@ func (a *Agent) switchModel(ctx context.Context, t *cmdTurn, _ ModelChoice, prov
 		return err
 	}
 	text := t.text(personality.ModelSet, personality.Args{argModel: ref})
-	if window := a.modelOf(provider, model).ContextWindow; window > 0 && used > window {
+	if window := a.modelOf(t.s, provider, model).ContextWindow; window > 0 && used > window {
 		text += fmt.Sprintf("\nThe conversation uses %d tokens; %s's window is %d tokens. Run /compact before the next prompt.", used, ref, window)
 	}
 	if save {
@@ -510,7 +512,7 @@ func someRefs(picks []pick) string {
 // offers them (0005-PLAN F4-2a).
 func (a *Agent) cmdThinking(ctx context.Context, t *cmdTurn, arg string) error {
 	model, think := a.choices(t.s)
-	levels := a.levelsOf(a.provOf(t.s), model)
+	levels := a.levelsOf(t.s, a.provOf(t.s), model)
 	if arg == "" {
 		t.say(t.text(personality.ThinkingCurrent, personality.Args{argLevel: catalog.Clamp(levels, think)}) + "\n" +
 			t.text(personality.ThinkingList, personality.Args{argLevels: strings.Join(levels, ", ")}))

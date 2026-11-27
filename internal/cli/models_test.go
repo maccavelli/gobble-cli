@@ -71,7 +71,13 @@ func modelEnv(t *testing.T) (*runEnv, *syncBuffer) {
 // registered after both (0046-MADR D2 as amended).
 func ownListings(t testing.TB, e *runEnv) {
 	e.ownListings()
-	t.Cleanup(func() { e.endListings(t.Context()) }) // done by now; endListings drops the cancellation
+	t.Cleanup(func() {
+		e.endListings(t.Context()) // done by now; endListings drops the cancellation
+		// The model data refresh is the run's too: ended, and waited for
+		// here, so none outlives the test's home (0072-MADR D20).
+		e.endModelData()
+		e.modelData.group.Wait()
+	})
 }
 
 // The tests' lister fails offline, so no test lists over the network

@@ -1063,6 +1063,27 @@ func TestConptyGobble(t *testing.T) {
 		}
 	}
 	report("nothing-saved", "none", observed)
+	// 0072-MADR M64: with every proxy variable a closed port, no case wrote
+	// model data under its home.
+	observed = "none"
+	for _, home := range homes {
+		if hasModelData(home) {
+			observed = "written"
+		}
+	}
+	report("no-model-data", "none", observed)
+}
+
+// hasModelData reports whether a model-data directory is under home.
+func hasModelData(home string) bool {
+	found := false
+	_ = filepath.WalkDir(home, func(p string, d os.DirEntry, err error) error { //nolint:errcheck // an unreadable part is not model data
+		if err == nil && d.IsDir() && d.Name() == "model-data" {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 // saved reports whether auth.json under home holds any provider's entry.

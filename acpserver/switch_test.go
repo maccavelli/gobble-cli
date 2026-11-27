@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -24,14 +25,14 @@ func switchAgent(t *testing.T, dir string, scripts map[string]*llmtest.Script, c
 	t.Helper()
 	client := &acptest.Client{Allow: true}
 	ag := New(Options{Version: "1.2.3",
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return scripts["fake"], nil },
-		ProviderFor: func(id, _ string, _ llm.Retry) (llm.Provider, error) {
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return scripts["fake"], nil },
+		ProviderFor: func(_ *provider.ModelData, id, _ string, _ llm.Retry) (llm.Provider, error) {
 			if s, ok := scripts[id]; ok {
 				return s, nil
 			}
 			return nil, errors.New("no provider " + id)
 		},
-		ModelInfo: func(p, m string) llm.Model {
+		ModelInfo: func(_ *provider.ModelData, p, m string) llm.Model {
 			if p == "other" && m == "x9" {
 				return llm.Model{Provider: p, ID: m, ContextWindow: 5}
 			}

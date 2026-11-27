@@ -10,6 +10,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session"
 )
 
@@ -19,7 +20,7 @@ import (
 func TestCompactionModeAndPrompts(t *testing.T) {
 	model := llmtest.NewScript(llmtest.Text(big(100)), llmtest.Text(big(100)), llmtest.Text("S"), llmtest.Text("after"))
 	client := &acptest.Client{}
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil },
 		Store: session.NewMemoryStore(), Compaction: compaction.Settings{ReserveTokens: 16384, KeepRecentTokens: 150},
 		CompactionPrompts: compaction.Prompts{System: "MY SYSTEM", Summary: "MY SUMMARY"}})
 	c := acptest.Connect(t, a, client)

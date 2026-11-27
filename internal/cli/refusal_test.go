@@ -83,7 +83,7 @@ func TestRefusalsFileUnreadable(t *testing.T) {
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p, err := modelProvider(e)("s", llm.Retry{Off: true})
+	p, err := modelProvider(e)(nil, "s", llm.Retry{Off: true})
 	if err != nil || p == nil {
 		t.Fatalf("provider: %v, %v; want it built", p, err)
 	}
@@ -106,7 +106,7 @@ func TestRefusalsFileUnreadableWarnsOncePerRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, session := range []string{"s1", "s2"} {
-		p, err := modelProvider(e)(session, llm.Retry{Off: true})
+		p, err := modelProvider(e)(nil, session, llm.Retry{Off: true})
 		if err != nil || p == nil {
 			t.Fatalf("provider %s: %v, %v; want it built", session, p, err)
 		}

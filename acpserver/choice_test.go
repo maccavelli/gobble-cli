@@ -16,6 +16,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -54,7 +55,7 @@ func (r *remembered) got() []string {
 func choiceAgent(t *testing.T, p llm.Provider, r *remembered) (*acptest.Conn, *acptest.Client, acp.SessionId) {
 	t.Helper()
 	client := &acptest.Client{Allow: true}
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models: func() ModelChoice { return multiModels }, Remember: r.add, Store: jsonl.New(t.TempDir(), jsonl.Options{})})
 	c := acptest.Connect(t, ag, client)
 	ag.SetConnection(c.Agent)
@@ -175,7 +176,7 @@ func TestModelOptionGrouped(t *testing.T) {
 func TestModelSaveDefault(t *testing.T) {
 	var saved []string
 	client := &acptest.Client{Allow: true}
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
 		Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
 		SaveSetting: func(path, value string) error { saved = append(saved, path+"="+value); return nil }})
 	c := acptest.Connect(t, ag, client)
@@ -245,7 +246,9 @@ func TestSignInLiftsMark(t *testing.T) {
 	refused := llmtest.Turn{Err: &llm.APIError{Status: 401, Err: fmt.Errorf("%w: refused", llm.ErrAuth)}}
 	var gen atomic.Uint64
 	client := &acptest.Client{Allow: true}
-	ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(refused), nil },
+	ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
+		return llmtest.NewScript(refused), nil
+	},
 		Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
 		CredentialGeneration: func(id string) uint64 {
 			if id == "fake" {
@@ -315,7 +318,7 @@ func TestQuotaMarkLapses(t *testing.T) {
 			var now atomic.Pointer[time.Time]
 			now.Store(new(time.Date(2026, 11, 9, 7, 0, 0, 0, cst)))
 			client := &acptest.Client{Allow: true}
-			ag := New(Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) {
+			ag := New(Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
 				return llmtest.NewScript(llmtest.Turn{Err: c.err}), nil
 			}, Models: func() ModelChoice { return multiModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
 				Now: func() time.Time { return *now.Load() }})

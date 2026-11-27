@@ -210,6 +210,40 @@ func otherFrom(f llm.LimitFact, source string) llm.LimitFact {
 	return llm.LimitFact{}
 }
 
+// turnCapSessionDocument is TestTurnCapFromLimits_0071's session_document
+// case (0072-MADR M54).
+func turnCapSessionDocument(t *testing.T) {
+	// 0072-MADR M54: with the session's document handed in, the cap is
+	// its document's, not the current one's, and the turn carries it.
+	session, current := handDoc(t, "https://session.invalid/api.json", 24000), handDoc(t, "https://current.invalid/api.json", 30000)
+	SetCurrentModelData(current)
+	t.Cleanup(func() { SetCurrentModelData(nil) })
+	w := &limitWire{listing: claudeListingOf(savedModel, 0, 200000)}
+	o := claudeOpts(t, w, "sk-session-document")
+	o.ModelData = session
+	if err := Discover(t.Context(), o, "claude", savedModel, nil); err != nil {
+		t.Fatal(err)
+	}
+	m := ModelInfoWith(o, "claude", savedModel, nil)
+	lim := llm.FitOutput(m.Limits.StreamedOutput.Tokens, m.MaxTokensFrom, m.ContextWindow, 0)
+	if lim.Tokens != 24000 || m.MaxTokensFrom != llm.CapCatalog {
+		t.Fatalf("the turn's limit %+v from %q; want the session's document's 24,000, the catalog's", lim, m.MaxTokensFrom)
+	}
+	o.Model = savedModel
+	p, err := New("claude", o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := wireRequest()
+	req.Model, req.MaxTokens = savedModel, lim.Tokens
+	if _, err := drain(t, p, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, bodies := w.seen(); len(bodies) == 0 || !strings.Contains(bodies[len(bodies)-1], `"max_tokens":24000`) {
+		t.Errorf("the turn's body %.200q; want it to carry 24,000", bodies)
+	}
+}
+
 // A call's cap is the streamed output the SDK's limits choose, its source
 // told apart, and its window the window else the input limit (0071-MADR
 // P17, P28, P33): a cap a service stated for a streamed call bounds the
@@ -235,6 +269,7 @@ func TestTurnCapFromLimits_0071(t *testing.T) {
 				s, m.Limits.Output, m.MaxTokens, m.MaxTokensFrom)
 		}
 	})
+	t.Run("session_document", turnCapSessionDocument)
 	t.Run("user", func(t *testing.T) {
 		w := &limitWire{listing: claudeListingOf(model, 128000, 200000)}
 		o := claudeOpts(t, w, "sk-user")
@@ -347,30 +382,6 @@ func TestProvider_ModelsJSONIsCaller_0066(t *testing.T) {
 	}
 	if lim := llm.FitOutput(m.Limits.StreamedOutput.Tokens, m.MaxTokensFrom, m.ContextWindow, 0); lim != (llm.OutputLimit{Tokens: 20000, Basis: llm.BasisUser}) {
 		t.Errorf("the turn asks %+v, want 20,000, basis user", lim)
-	}
-}
-
-// The built-in copy reaches a lookup's limits as the "models.dev" layer,
-// registry evidence ranked below the provider's listing, which states the
-// chosen value (0066-MADR S25 to S27, S42; 0071-MADR Q5 (1)). The copy's
-// own value is not asserted.
-func TestLimits_BuiltInCopyBelowListing_0066(t *testing.T) {
-	const model = "claude-haiku-5-5" // a model the built-in copy states
-	built, err := builtIn()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info, ok := built.doc.meta.Model(llmprovider.ProviderClaude, model); !ok || !info.Has(catalog.FieldMaxOutputTokens) || info.MaxOutputTokens == 12345 {
-		t.Fatalf("the built-in copy states no output for %s other than the listing's, so the test shows nothing", model)
-	}
-	w := &limitWire{listing: claudeListingOf(model, 12345, 200000)}
-	o := claudeOpts(t, w, "sk-builtin")
-	if err := Discover(t.Context(), o, "claude", model, nil); err != nil {
-		t.Fatal(err)
-	}
-	m := ModelInfoWith(o, "claude", model, nil)
-	if out := m.Limits.Output; out.Tokens != 12345 || out.Source != "listing:claude" || otherFrom(out, "models.dev").Tokens == 0 {
-		t.Errorf("output %+v; want the listing's 12,345 chosen, the built-in copy beside it as models.dev", out)
 	}
 }
 

@@ -83,7 +83,7 @@ func connectMCP(t *testing.T, p llm.Provider, mo MCPOptions) (*acptest.Conn, *Ag
 	t.Helper()
 	logs := &syncBuffer{}
 	a := New(Options{
-		Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		MCP: mo, Logger: slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	c := acptest.Connect(t, a, &acptest.Client{Allow: true})
@@ -451,7 +451,7 @@ func newUnionRig(t *testing.T, p llm.Provider, ss SessionSettings, mo MCPOptions
 	t.Helper()
 	url, calls := mcptest.UnionHTTPServer(t)
 	logs := &syncBuffer{}
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Settings: func(string) SessionSettings { return ss }, MCP: mo,
 		Logger: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))})
 	client := &acptest.Client{Allow: true}

@@ -25,10 +25,10 @@ func TestStaleResolverCannotBuildAForeignSession(t *testing.T) {
 		t.Fatal("the resolver was rebuilt: it is not the stale one the test needs")
 	}
 	const want = "provider openai has an OAuth login in auth.json, which gobble does not use (0005-PLAN F4-3b)"
-	if _, err := modelProvider(e)("session-1", llm.Retry{}); err == nil || err.Error() != want {
+	if _, err := modelProvider(e)(nil, "session-1", llm.Retry{}); err == nil || err.Error() != want {
 		t.Errorf("the run's provider over a foreign session gave %v, want the refusal %q", err, want)
 	}
-	if _, err := providerFor(e)("openai", "session-2", llm.Retry{}); err == nil || err.Error() != want {
+	if _, err := providerFor(e)(nil, "openai", "session-2", llm.Retry{}); err == nil || err.Error() != want {
 		t.Errorf("a session's provider over a foreign session gave %v, want the refusal %q", err, want)
 	}
 }

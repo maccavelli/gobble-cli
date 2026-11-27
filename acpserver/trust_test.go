@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
@@ -52,7 +53,7 @@ func projectFiles(t *testing.T, cfg, cwd string) {
 // the read tool, client answering its questions.
 func trustAgent(t *testing.T, model llm.Provider, client acp.Client, logs *bytes.Buffer, change func(*Options)) *acptest.Conn {
 	t.Helper()
-	opts := Options{Version: "1.2.3", Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels },
+	opts := Options{Version: "1.2.3", Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels },
 		Store: jsonl.New(t.TempDir(), jsonl.Options{}), Tools: []tool.Tool{builtin.Read()}, Logger: slog.New(slog.NewTextHandler(logs, nil))}
 	change(&opts)
 	ag := New(opts)

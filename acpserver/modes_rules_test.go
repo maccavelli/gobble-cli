@@ -13,6 +13,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 )
 
@@ -22,7 +23,7 @@ import (
 func modeAgent(t *testing.T, s llm.Provider, client *acptest.Client, ss SessionSettings, override, mode, cwd string) (*acptest.Conn, acp.SessionId, *syncBuffer) {
 	t.Helper()
 	logs := &syncBuffer{}
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return s, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return s, nil },
 		Settings: func(string) SessionSettings { return ss }, Override: Override{Mode: override}, Logger: slog.New(slog.NewTextHandler(logs, nil))})
 	c := acptest.Connect(t, a, client)
 	a.SetConnection(c.Agent)
@@ -41,7 +42,7 @@ func modeAgent(t *testing.T, s llm.Provider, client *acptest.Client, ss SessionS
 func TestModesOffered(t *testing.T) {
 	for _, allow := range []bool{false, true} {
 		client := &acptest.Client{}
-		a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
+		a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
 			Settings: func(string) SessionSettings { return SessionSettings{AllowBypass: allow} }})
 		c := acptest.Connect(t, a, client)
 		a.SetConnection(c.Agent)
@@ -225,7 +226,7 @@ func TestStartMode(t *testing.T) {
 		want     string
 	}{{modeAcceptEdits, false, modeAcceptEdits}, {modeBypass, true, modeBypass}, {modeBypass, false, modeDefault}, {"", false, modeDefault}} {
 		client := &acptest.Client{}
-		a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
+		a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil },
 			Settings: func(string) SessionSettings { return SessionSettings{AllowBypass: c.allow} }, Override: Override{Mode: c.override},
 			Logger: slog.New(slog.DiscardHandler)})
 		conn := acptest.Connect(t, a, client)

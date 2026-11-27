@@ -10,6 +10,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
@@ -35,7 +36,7 @@ func TestSessionPersonality(t *testing.T) {
 		var logs bytes.Buffer
 		client := &acptest.Client{}
 		ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}), Models: func() ModelChoice { return testModels },
-			Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil },
+			Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil },
 			Settings: func(string) SessionSettings { return SessionSettings{Personality: c.setting} },
 			Logger:   slog.New(slog.NewTextHandler(&logs, nil))})
 		conn := acptest.Connect(t, ag, client)

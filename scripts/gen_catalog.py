@@ -4,8 +4,10 @@
 docs/decisions/0005-PLAN-v1-feature-scope.md, the Amendments entry "F4-2
 re-made on go-llmprovider-sdk v1.12.0's model metadata", F4-2a step 1: keep
 the nine sections go-llmprovider-sdk reads, and record where and when they
-came from. Nothing in gobble fetches the document at run time; this script
-is how the snapshot is made, and refreshed.
+came from. This script makes the built-in snapshot, which gobble reads until it
+keeps a copy of its own: since 0072-MADR, gobble downloads the document at run
+time itself (gobble models refresh), and 0072-PLAN's Phase 3 removes this
+script and the snapshot.
 
 Writes:
   llm/catalog/data/models.json   the nine sections, compact, keys sorted

@@ -15,6 +15,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/mcpclient/mcptest"
 	"github.com/maccavelli/gobble-cli/session"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
@@ -46,7 +47,7 @@ func settingsAgent(t *testing.T, store session.Store, p llm.Provider, settings f
 	t.Helper()
 	logs := &syncBuffer{}
 	a := New(Options{
-		Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Store: store, Settings: settings, MCP: mo, Logger: slog.New(slog.NewTextHandler(logs, nil)),
 	})
 	client := &acptest.Client{Allow: true}

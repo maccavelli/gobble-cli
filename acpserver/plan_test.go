@@ -251,7 +251,7 @@ func TestBackgroundRequestsAreMarked(t *testing.T) {
 		small := &markedProvider{Provider: llmtest.NewScript(llmtest.Text("A title"))}
 		main := &markedProvider{Provider: llmtest.NewScript(llmtest.Text("ok"))}
 		h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("unused")), small, func(o *Options) {
-			o.Provider = func(string, llm.Retry) (llm.Provider, error) { return main, nil }
+			o.Provider = func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return main, nil }
 		})
 		id := newSession(t, h.c, t.TempDir(), nil).SessionId
 		if _, err := prompt(t, h.c, id, "Name me"); err != nil {

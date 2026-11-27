@@ -94,6 +94,9 @@ This record decides every case of the interim on `v1.32.0` (the L rows) and what
   provider's cached listing (`llm/provider/model.go:107-115`, `:158-171`; go-llmprovider-sdk `catalog/lookup.go:28-30` at
   `v1.32.0`). `llm.Model.MaxTokens` and `ContextWindow` are "0 is unknown" (`llm/llm.go:159-162`); `llm.Model` does not say
   which layer gave them.
+  *(2026-11-25, 0072-MADR D16: from 0072-PLAN's Phase 2 `a.modelOf` takes the session and hands `a.info` the session's
+  models.dev document, the copy gobble keeps (else the built-in one until 0072's Phase 3), so a turn's cap and window read
+  the document the session began with (0072-MADR M50, M80).)*
 * **F5. models.json's invented cap.** A model models.json defines without `maxTokens` gets Pi's 16,384, and without
   `contextWindow` Pi's 128,000 (`llm/catalog/modelsjson.go:114-118`, `:459-463`); the layer marks both known
   (`llm/provider/model.go:198-203`). `modelOverrides` sets only what it gives (`modelsjson.go:450-453`, `:469-485`), so a

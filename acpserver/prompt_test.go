@@ -28,6 +28,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // echoResult is a model that calls one tool, then answers with the result
@@ -97,11 +98,11 @@ func TestPromptImage(t *testing.T) {
 	script := llmtest.NewScript(llmtest.Text("seen")).WithCapabilities(llm.Capabilities{ImageInput: true})
 	agent := New(Options{
 		Version: "1.2.3", NewID: counterIDs(),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return script, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return script, nil },
 		Models: func() ModelChoice {
 			return ModelChoice{Provider: "openai", Default: "vision", Models: []string{"vision"}}
 		},
-		ModelInfo: func(provider, model string) llm.Model {
+		ModelInfo: func(_ *provider.ModelData, provider, model string) llm.Model {
 			return llm.Model{Provider: provider, ID: model, Input: []string{"text", "image"}}
 		},
 	})
@@ -144,15 +145,15 @@ func TestMentionImage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cwd, "pic.png"), png, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	vision := func(provider, model string) llm.Model {
+	vision := func(_ *provider.ModelData, provider, model string) llm.Model {
 		return llm.Model{Provider: provider, ID: model, Input: []string{"text", "image"}}
 	}
-	textOnly := func(provider, model string) llm.Model {
+	textOnly := func(_ *provider.ModelData, provider, model string) llm.Model {
 		return llm.Model{Provider: provider, ID: model, Input: []string{"text"}}
 	}
 	for _, tc := range []struct {
 		name  string
-		info  func(string, string) llm.Model
+		info  func(*provider.ModelData, string, string) llm.Model
 		image bool
 	}{
 		{"vision", vision, true},
@@ -162,7 +163,7 @@ func TestMentionImage(t *testing.T) {
 			script := llmtest.NewScript(llmtest.Text("seen")).WithCapabilities(llm.Capabilities{ImageInput: true})
 			agent := New(Options{
 				Version: "1.2.3", NewID: counterIDs(),
-				Provider: func(string, llm.Retry) (llm.Provider, error) { return script, nil },
+				Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return script, nil },
 				Models: func() ModelChoice {
 					return ModelChoice{Provider: "openai", Default: "m", Models: []string{"m"}}
 				},
@@ -471,7 +472,7 @@ func TestPhoneLegibleBounds(t *testing.T) {
 // With no credential, initialize and session/new succeed and a prompt
 // fails with auth_required.
 func TestNoCredentialIsAuthRequired(t *testing.T) {
-	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) {
+	agent := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
 		return nil, fmt.Errorf("%w: no model credential", llm.ErrAuth)
 	}})
 	c := acptest.Connect(t, agent, &acptest.Client{})

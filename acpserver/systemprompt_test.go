@@ -19,6 +19,7 @@ import (
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
@@ -292,7 +293,7 @@ func TestSystemPromptRefusedContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	ag := &countingAgent{Agent: New(Options{Version: "1.2.3", Store: store, Models: func() ModelChoice { return testModels },
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil }})}
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return llmtest.NewScript(), nil }})}
 	c := acptest.Connect(t, ag, &acptest.Client{})
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() {

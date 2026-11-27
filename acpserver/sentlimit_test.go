@@ -374,7 +374,7 @@ func TestTitleCapFromLimits_0071(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			small := llmtest.NewScript(llmtest.Text("A title"))
 			h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("ok")), small, func(o *Options) {
-				o.ModelInfo = func(provider, model string) llm.Model {
+				o.ModelInfo = func(_ *provider.ModelData, provider, model string) llm.Model {
 					m := c.info
 					m.Provider, m.ID = provider, model
 					return m
@@ -504,7 +504,7 @@ func descriptions(opts []acp.SessionConfigOption) map[string]string {
 func TestACP_ModelOptionDescription_0066(t *testing.T) {
 	t.Run("described", func(t *testing.T) {
 		h := newLimitHarnessWith(t, SessionSettings{}, map[string]llm.Model{}, func(o *Options) {
-			o.CachedLimits = func(provider, model string) llm.Limits {
+			o.CachedLimits = func(_ *provider.ModelData, provider, model string) llm.Limits {
 				if provider+"/"+model != "fake/m1" {
 					return llm.Limits{}
 				}
@@ -524,9 +524,9 @@ func TestACP_ModelOptionDescription_0066(t *testing.T) {
 		o := provider.Options{APIKey: "sk-describe", HTTPClient: &http.Client{Transport: svc}, Cache: cache, Retry: &llm.Retry{Off: true}}
 		choice := ModelChoice{Provider: "claude", Models: []string{"claude-test-1", "claude-test-2"}, Default: "claude-test-1"}
 		ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-			Provider: func(string, llm.Retry) (llm.Provider, error) { return provider.New("claude", o) },
+			Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return provider.New("claude", o) },
 			Models:   func() ModelChoice { return choice },
-			CachedLimits: func(id, model string) llm.Limits {
+			CachedLimits: func(_ *provider.ModelData, id, model string) llm.Limits {
 				return provider.CachedLimits(o, id, model, nil)
 			}})
 		c := acptest.Connect(t, ag, &acptest.Client{})

@@ -119,7 +119,7 @@ func TestStartNoteInLineSession(t *testing.T) {
 // as before (0019-MADR D15).
 func TestStartNoCredential(t *testing.T) {
 	e, _ := startEnv(t, "defaultProvider: openai\n", nil)
-	if _, err := modelProvider(e)("s1", llm.DefaultRetry); err == nil || !strings.Contains(err.Error(), "set OPENAI_API_KEY") ||
+	if _, err := modelProvider(e)(nil, "s1", llm.DefaultRetry); err == nil || !strings.Contains(err.Error(), "set OPENAI_API_KEY") ||
 		!errors.Is(err, llm.ErrAuth) {
 		t.Fatalf("no credential at all: %v, want defaultProvider's variable named", err)
 	}

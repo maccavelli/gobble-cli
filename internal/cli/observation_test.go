@@ -85,7 +85,7 @@ func TestAgent_UnreadableObservations_0066(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, session := range []string{"s1", "s2"} {
-			if p, err := modelProvider(e)(session, llm.Retry{Off: true}); err != nil || p == nil {
+			if p, err := modelProvider(e)(nil, session, llm.Retry{Off: true}); err != nil || p == nil {
 				t.Fatalf("provider %s: %v, %v; want it built", session, p, err)
 			}
 		}
@@ -410,7 +410,7 @@ func TestSavedCapAtModelsJSONBase_0071(t *testing.T) {
 	hook := e.agentOptions().CachedLimits
 	for model, want := range map[string]int{"claude-saved-1": 16000, "claude-saved-2": 0} {
 		for name, f := range map[string]llm.LimitFact{"lookup": provider.ModelInfoWith(o, "claude", model, nil).Limits.Output,
-			"CachedLimits hook": hook("claude", model).Output} {
+			"CachedLimits hook": hook(nil, "claude", model).Output} {
 			if stated := f.Source == "service-stated"; stated != (want > 0) || (stated && f.Tokens != want) {
 				t.Errorf("%s of %s: output %+v; want service-stated %v (%d)", name, model, f, want > 0, want)
 			}

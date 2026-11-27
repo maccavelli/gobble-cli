@@ -16,6 +16,7 @@ import (
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	"github.com/maccavelli/gobble-cli/session"
@@ -44,13 +45,16 @@ func cacheOf(setting string) llm.CacheRetention {
 	return llm.CacheRetention(setting)
 }
 
-// modelOf is what the catalog knows of provider's model.
-func (a *Agent) modelOf(provider, model string) llm.Model { return a.info(provider, model) }
+// modelOf is what the catalog knows of providerID's model, read from s's
+// document; nil s reads the current one (0072-MADR D19, M80).
+func (a *Agent) modelOf(s *liveSession, providerID, model string) llm.Model {
+	return a.info(a.dataOf(s), providerID, model)
+}
 
-// levelsOf are the thinking levels provider's model offers, by Pi's rule
+// levelsOf are the thinking levels providerID's model offers, by Pi's rule
 // (catalog.Levels); a model the catalog does not know offers off to xhigh.
-func (a *Agent) levelsOf(provider, model string) []string {
-	return catalog.Levels(a.modelOf(provider, model))
+func (a *Agent) levelsOf(s *liveSession, providerID, model string) []string {
+	return catalog.Levels(a.modelOf(s, providerID, model))
 }
 
 // provOf is s's provider: the one it switched to, or the run's
@@ -191,9 +195,9 @@ func (a *Agent) configOptions(s *liveSession) []acp.SessionConfigOption {
 	prov := a.provOf(s)
 	var out []acp.SessionConfigOption
 	if picks := a.choice().picks(); len(picks) > 0 {
-		out = append(out, modelOption(refOf(prov, model), picks, a.describeModel))
+		out = append(out, modelOption(refOf(prov, model), picks, func(p, m string) *string { return a.describeModel(s, p, m) }))
 	}
-	levels := a.levelsOf(prov, model)
+	levels := a.levelsOf(s, prov, model)
 	return append(out, selectOption(configThinking, "Thinking", acp.SessionConfigOptionCategoryThoughtLevel,
 		catalog.Clamp(levels, thinking), levels))
 }
@@ -239,12 +243,13 @@ func modelOption(current string, picks []pick, describe func(provider, model str
 // describeModel is a model option's description, "context N · max-out M",
 // each "unknown" when not known, from Options.CachedLimits, which starts no
 // request; nil with no hook (0066-MADR D6, S19; 0071-MADR P46). The window is
-// Window, else Input; the output a turn's, StreamedOutput, else Output.
-func (a *Agent) describeModel(provider, model string) *string {
+// Window, else Input; the output a turn's, StreamedOutput, else Output. It
+// reads s's document (0072-MADR M80).
+func (a *Agent) describeModel(s *liveSession, providerID, model string) *string {
 	if a.cachedLimits == nil {
 		return nil
 	}
-	l := a.cachedLimits(provider, model)
+	l := a.cachedLimits(a.dataOf(s), providerID, model)
 	window, out := l.Window, l.StreamedOutput
 	if !window.Known {
 		window = l.Input
@@ -290,19 +295,20 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown model %q", value))
 		}
 		var built llm.Provider
+		var builtWith *provider.ModelData
 		if prov != cur {
 			var err error
-			if built, err = a.buildProvider(s, prov); err != nil {
+			if built, builtWith, err = a.buildProvider(s, prov); err != nil {
 				return nil, &switchError{ref: refOf(prov, m), err: err}
 			}
 		}
-		clamped := catalog.Clamp(a.levelsOf(prov, m), think)
+		clamped := catalog.Clamp(a.levelsOf(s, prov, m), think)
 		a.mu.Lock()
 		if m != s.model || prov != cur { // a new model's window may fit (0005-PLAN F5-2 decision 11)
 			s.pause, s.pauseErr = pauseNone, ""
 		}
 		if prov != cur {
-			s.providerID, s.provider = prov, built
+			s.providerID, s.provider, s.builtWith = prov, built, builtWith
 		}
 		s.model, s.think = m, clamped
 		a.mu.Unlock()
@@ -313,7 +319,7 @@ func (a *Agent) setConfig(ctx context.Context, s *liveSession, id, value string)
 			entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: clamped})
 		}
 	case configThinking:
-		if !slices.Contains(a.levelsOf(cur, model), value) {
+		if !slices.Contains(a.levelsOf(s, cur, model), value) {
 			return nil, invalidParams(s.id, fmt.Sprintf("unknown thinking level %q", value))
 		}
 		a.mu.Lock()
@@ -345,22 +351,25 @@ func (e *switchError) Error() string { return fmt.Sprintf("Cannot switch to %s: 
 
 func (e *switchError) Unwrap() error { return e.err }
 
-// buildProvider builds provider id's model for s: the run's through
-// Provider, another through ProviderFor (0025-MADR D1).
-func (a *Agent) buildProvider(s *liveSession, id string) (llm.Provider, error) {
+// buildProvider builds provider id's model for s, with s's document, which
+// it returns beside it: the run's through Provider, another through
+// ProviderFor (0025-MADR D1; 0072-MADR M86).
+func (a *Agent) buildProvider(s *liveSession, id string) (llm.Provider, *provider.ModelData, error) {
+	data := a.dataOf(s)
 	a.mu.Lock()
 	retry := s.retry
 	a.mu.Unlock()
-	if id == a.models().Provider {
-		if a.provider == nil {
-			return nil, ErrNoProvider
-		}
-		return a.provider(string(s.id), retry)
+	var p llm.Provider
+	var err error
+	switch {
+	case id == a.models().Provider && a.provider != nil:
+		p, err = a.provider(data, string(s.id), retry)
+	case id == a.models().Provider, a.providerFor == nil:
+		return nil, nil, ErrNoProvider
+	default:
+		p, err = a.providerFor(data, id, string(s.id), retry)
 	}
-	if a.providerFor == nil {
-		return nil, ErrNoProvider
-	}
-	return a.providerFor(id, string(s.id), retry)
+	return p, data, err
 }
 
 // Override is a run's own model and thinking level, --model's and
@@ -395,9 +404,9 @@ func (a *Agent) applyOverride(ctx context.Context, s *liveSession) error {
 	level := think
 	switch {
 	case o.Thinking != "":
-		level = catalog.Clamp(a.levelsOf(prov, model), o.Thinking)
+		level = catalog.Clamp(a.levelsOf(s, prov, model), o.Thinking)
 	case changed:
-		level = catalog.Clamp(a.levelsOf(prov, model), think)
+		level = catalog.Clamp(a.levelsOf(s, prov, model), think)
 	}
 	if level != think {
 		entries = append(entries, session.Entry{Type: session.TypeThinkingLevelChange, ThinkingLevel: level})

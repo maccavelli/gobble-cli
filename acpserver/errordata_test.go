@@ -125,13 +125,13 @@ func wireData(t *testing.T, err error) (int, string) {
 	return re.Code, encodeData(t, strictData(t, "the error's data", b))
 }
 
-// limitAgent is a connected agent whose run's provider is named provider and
-// is p, with a small KeepRecentTokens, so a session can be compacted.
-func limitAgent(t *testing.T, provider string, p llm.Provider) *acptest.Conn {
+// limitAgent is a connected agent whose run's provider is named providerID
+// and is p, with a small KeepRecentTokens, so a session can be compacted.
+func limitAgent(t *testing.T, providerID string, p llm.Provider) *acptest.Conn {
 	t.Helper()
 	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Store: session.NewMemoryStore(),
-		Models:     func() ModelChoice { return ModelChoice{Provider: provider, Models: []string{"m1"}, Default: "m1"} },
-		Provider:   func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Models:     func() ModelChoice { return ModelChoice{Provider: providerID, Models: []string{"m1"}, Default: "m1"} },
+		Provider:   func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Compaction: compaction.Settings{ReserveTokens: 16384, KeepRecentTokens: 150}})
 	c := acptest.Connect(t, a, &acptest.Client{})
 	a.SetConnection(c.Agent)

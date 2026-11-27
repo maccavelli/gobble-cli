@@ -14,6 +14,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
 	"github.com/maccavelli/gobble-cli/session"
@@ -40,7 +41,7 @@ func newPersonalityHarness(t *testing.T, dir string, ss SessionSettings, client 
 	}
 	h := &personalityHarness{client: client, model: llmtest.NewScript(script...)}
 	h.ag = New(Options{Version: "1.2.3", Store: jsonl.New(dir, jsonl.Options{}), Models: func() ModelChoice { return testModels },
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return h.model, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return h.model, nil },
 		Settings: func(string) SessionSettings { return ss },
 		SaveSetting: func(path, value string) error {
 			h.mu.Lock()

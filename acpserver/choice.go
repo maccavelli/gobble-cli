@@ -321,7 +321,7 @@ func heading(p ProviderChoice) string {
 // usable provider, each a table of its entries with their numbers, then the
 // providers that offer none, each with its state (0025-MADR D5, deviation
 // 2). keep reports which entries to list; numbers stay those of picks.
-func (a *Agent) pickerText(c ModelChoice, picks []pick, keep func(int) bool) string {
+func (a *Agent) pickerText(s *liveSession, c ModelChoice, picks []pick, keep func(int) bool) string {
 	var b strings.Builder
 	section := ""
 	ps := c.providerList()
@@ -339,7 +339,7 @@ func (a *Agent) pickerText(c ModelChoice, picks []pick, keep func(int) bool) str
 			}
 			b.WriteString("\n" + title + "\n\n| # | Model | Context | In $/M | Out $/M | Thinking |\n| --: | :-- | --: | --: | --: | :-- |\n")
 		}
-		info := a.info(p.provider, p.model)
+		info := a.modelOf(s, p.provider, p.model)
 		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s |\n", i+1, refOf(p.provider, p.model),
 			tokensShort(info.ContextWindow), price(info, info.Cost.Input), price(info, info.Cost.Output), levelRange(catalog.Levels(info)))
 	}
@@ -393,7 +393,7 @@ func levelRange(levels []string) string {
 // matches reports which of picks match words: each word in the entry's ref
 // or the model's name, or, with SearchModels, the SDK's matcher over the
 // provider's models (0025-MADR D5).
-func (a *Agent) matches(picks []pick, words string) func(int) bool {
+func (a *Agent) matches(s *liveSession, picks []pick, words string) func(int) bool {
 	q := strings.ToLower(strings.TrimSpace(words))
 	found := map[string]bool{}
 	if a.search != nil {
@@ -417,7 +417,7 @@ func (a *Agent) matches(picks []pick, words string) func(int) bool {
 		if found[refOf(picks[i].provider, picks[i].model)] {
 			return true
 		}
-		name := strings.ToLower(a.info(picks[i].provider, picks[i].model).Name)
+		name := strings.ToLower(a.modelOf(s, picks[i].provider, picks[i].model).Name)
 		for w := range strings.FieldsSeq(q) {
 			if !strings.Contains(ref, w) && !strings.Contains(name, w) {
 				return false
@@ -486,7 +486,7 @@ func (a *Agent) cmdModels(_ context.Context, t *cmdTurn, arg string) error {
 	picks := c.picks()
 	match := func(int) bool { return true }
 	if words != "" {
-		match = a.matches(picks, words)
+		match = a.matches(t.s, picks, words)
 	}
 	keep := func(i int) bool {
 		if i < 0 {
@@ -496,7 +496,7 @@ func (a *Agent) cmdModels(_ context.Context, t *cmdTurn, arg string) error {
 	}
 	for i := range picks {
 		if keep(i) {
-			t.say(a.pickerText(c, picks, keep))
+			t.say(a.pickerText(t.s, c, picks, keep))
 			return nil
 		}
 	}

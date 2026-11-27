@@ -16,6 +16,7 @@ import (
 	"github.com/maccavelli/gobble-cli/internal/cli/term"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -23,8 +24,8 @@ import (
 func withModel(t *testing.T, s *llmtest.Script) {
 	t.Helper()
 	old := modelProvider
-	modelProvider = func(*runEnv) func(string, llm.Retry) (llm.Provider, error) {
-		return func(string, llm.Retry) (llm.Provider, error) { return s, nil }
+	modelProvider = func(*runEnv) func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
+		return func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return s, nil }
 	}
 	t.Cleanup(func() { modelProvider = old })
 }

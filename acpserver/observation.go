@@ -163,7 +163,7 @@ func (a *Agent) learnedCap(s *liveSession, provider, model string, o llm.LimitOb
 // and model, when the discovery of provider's model ended with its output
 // limit unknown (0066-MADR D10 as amended 2026-11-25, S10; 0071-MADR V7).
 func (a *Agent) noteUnknown(s *liveSession, provider, model string) {
-	if c, _, _ := outputCap(a.modelOf(provider, model)); c > 0 {
+	if c, _, _ := outputCap(a.modelOf(s, provider, model)); c > 0 {
 		return
 	}
 	a.noteOnce(s, "unknown:"+refOf(provider, model), a.voice(s).Text(personality.ModelLimitUnknown, personality.Args{argModel: model}))

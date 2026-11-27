@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -27,6 +28,7 @@ import (
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/catalog"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/personality"
 	sysprompt "github.com/maccavelli/gobble-cli/prompt"
@@ -74,14 +76,18 @@ type Options struct {
 	// prompt with auth_required. It is called once per session, with the
 	// session's ACP id, so each session has its own provider and session id
 	// (0021-MADR D4), and with the session's retry settings (0005-PLAN F5-1).
-	Provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	// data is the session's models.dev document, nil for none, which the
+	// provider is built with (0072-MADR D17, D19, M86, "Builders take the
+	// document (Recommended)"); initialize's image check, which has no
+	// session, passes the current one.
+	Provider func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error)
 	// Models is the model choice offered as the model config option. Nil
 	// offers none.
 	Models func() ModelChoice
 	// ProviderFor builds provider id's model for a session switched to it,
-	// with the session's id and retry settings (0025-MADR D1). Nil offers no
-	// switch to another provider.
-	ProviderFor func(id, sessionID string, retry llm.Retry) (llm.Provider, error)
+	// with the session's document, id and retry settings (0025-MADR D1;
+	// 0072-MADR M86). Nil offers no switch to another provider.
+	ProviderFor func(data *provider.ModelData, id, sessionID string, retry llm.Retry) (llm.Provider, error)
 	// Remember is told each model the user chooses, as a provider/model ref,
 	// by /model or the model option, for the recent models (0025-MADR D3).
 	// Nil remembers nothing.
@@ -106,9 +112,22 @@ type Options struct {
 	// with words (0025-MADR D5). Nil matches words in each ref and name.
 	SearchModels func(provider string, models []string, query string) []string
 	// ModelInfo is what the catalog knows of a provider's model: its levels,
-	// window and price (0005-PLAN F4-2a). Nil knows nothing, so every model
-	// offers off to xhigh, with no window and no price.
-	ModelInfo func(provider, model string) llm.Model
+	// window and price (0005-PLAN F4-2a), read from data, the session's
+	// models.dev document; nil is the current one, as for a read no session
+	// makes (0072-MADR D19, M80, "Hooks take the session's document
+	// (Recommended)"). Nil knows nothing, so every model offers off to xhigh,
+	// with no window and no price.
+	ModelInfo func(data *provider.ModelData, provider, model string) llm.Model
+	// ModelData is the process's current models.dev document, nil while
+	// there is none: each session takes it when it is created, loaded or
+	// forked and keeps it until it ends; a session that began with none
+	// takes the first one there is and keeps it (0072-MADR D19, M60, M61).
+	// Nil gives every session none.
+	ModelData func() *provider.ModelData
+	// ModelDataLine is /context's and /session's line for a session's
+	// document, nil for none, after the output limit's line (0072-MADR D12,
+	// M37). Nil shows no line.
+	ModelDataLine func(data *provider.ModelData) string
 	// Discover reads every source of a provider's model's limits, so that
 	// ModelInfo then reads what the service states. It is started in the
 	// background, with a context the session's close cancels, when a
@@ -121,7 +140,10 @@ type Options struct {
 	// to the wait a close gives a title. It may be called concurrently, for
 	// several sessions and models. Its error is logged at debug. Nil
 	// discovers nothing (0066-MADR D1, D2, S8, S40; 0071-MADR P37, P40).
-	Discover func(ctx context.Context, provider, model string) error
+	// data is the session's models.dev document, nil for none, which the
+	// discovery reads, as every lookup for the session does (0072-MADR D17,
+	// its ninth addition).
+	Discover func(ctx context.Context, data *provider.ModelData, provider, model string) error
 	// SaveObservation records a cap a service stated for providerID's model
 	// when it refused a call's output limit, which the call (a turn's, a
 	// summary's or a title's) was sent again at, for later runs; CallOutput a
@@ -132,9 +154,10 @@ type Options struct {
 	SaveObservation func(providerID string, o llm.LimitObservation)
 	CallOutput      func(providerID, model string, outputTokens int)
 	// CachedLimits are a provider's model's limits as they are cached now:
-	// it must start no request. The model option's descriptions read it.
-	// Nil describes nothing (0066-MADR D6, S19; 0071-MADR P46).
-	CachedLimits func(provider, model string) llm.Limits
+	// it must start no request. The model option's descriptions read it,
+	// with the session's document, as ModelInfo takes it. Nil describes
+	// nothing (0066-MADR D6, S19; 0071-MADR P46; 0072-MADR M80).
+	CachedLimits func(data *provider.ModelData, provider, model string) llm.Limits
 	// Override is the run's own model and thinking level, which win over
 	// every session's, new, forked, loaded or resumed (0005-PLAN F4-2c).
 	// Zero leaves each session its own.
@@ -194,9 +217,9 @@ type Agent struct {
 
 	version  string
 	newID    func() string
-	provider func(sessionID string, retry llm.Retry) (llm.Provider, error)
+	provider func(data *provider.ModelData, sessionID string, retry llm.Retry) (llm.Provider, error)
 	// providerFor builds another provider for a switched session.
-	providerFor   func(id, sessionID string, retry llm.Retry) (llm.Provider, error)
+	providerFor   func(data *provider.ModelData, id, sessionID string, retry llm.Retry) (llm.Provider, error)
 	models        func() ModelChoice
 	rememberModel func(ref string)
 	saveRefusal   func(providerID string, refusal llm.ReasoningRefusal)
@@ -205,7 +228,11 @@ type Agent struct {
 	// P46).
 	saveObservation func(providerID string, o llm.LimitObservation)
 	callOutput      func(providerID, model string, outputTokens int)
-	cachedLimits    func(provider, model string) llm.Limits
+	cachedLimits    func(data *provider.ModelData, provider, model string) llm.Limits
+	// modelData and dataLine are Options.ModelData and Options.ModelDataLine
+	// (0072-MADR D19, D12).
+	modelData func() *provider.ModelData
+	dataLine  func(data *provider.ModelData) string
 	// savedAs is, by provider/model asked, the model a cap learned for
 	// such a request was saved under, when that is another (0071-PLAN's
 	// review deviation of 2026-11-25, R6); guarded by mu.
@@ -218,8 +245,8 @@ type Agent struct {
 	// Options.PlanConsent.
 	credGen     func(id string) uint64
 	planConsent func(id string) (ConsentState, error)
-	info        func(provider, model string) llm.Model
-	discover    func(ctx context.Context, provider, model string) error
+	info        func(data *provider.ModelData, provider, model string) llm.Model
+	discover    func(ctx context.Context, data *provider.ModelData, provider, model string) error
 	override    Override
 	tools       []tool.Tool
 	noGrants    bool
@@ -282,9 +309,14 @@ type liveSession struct {
 	// use with the session's id; cache is the hint its turns send
 	// (0021-MADR D3, D4).
 	provider llm.Provider
-	cache    llm.CacheRetention
-	think    string
-	cancel   context.CancelFunc
+	// data is the session's models.dev document, nil for none, taken at its
+	// start and kept (0072-MADR D19; dataOf); builtWith is the one provider
+	// was built with, under the agent's mu (D22).
+	data      atomic.Pointer[provider.ModelData]
+	builtWith *provider.ModelData
+	cache     llm.CacheRetention
+	think     string
+	cancel    context.CancelFunc
 	// idle is closed when the running turn releases; nil with no turn
 	// (0005-PLAN F4-3c-1).
 	idle chan struct{}
@@ -415,6 +447,7 @@ func (s *liveSession) warningLog() *agent.WarningLog {
 func New(opts Options) *Agent {
 	a := &Agent{version: opts.Version, newID: opts.NewID, provider: opts.Provider, providerFor: opts.ProviderFor, models: opts.Models, info: opts.ModelInfo,
 		discover: opts.Discover, saveObservation: opts.SaveObservation, callOutput: opts.CallOutput, cachedLimits: opts.CachedLimits,
+		modelData: opts.ModelData, dataLine: opts.ModelDataLine,
 		rememberModel: opts.Remember, saveRefusal: opts.SaveRefusal, search: opts.SearchModels, credGen: opts.CredentialGeneration,
 		planConsent: opts.PlanConsent,
 		override:    opts.Override, tools: opts.Tools, noGrants: opts.NoRequestPermissions, store: opts.Store, now: opts.Now, mcp: opts.MCP, logger: opts.Logger, prompt: opts.Prompt,
@@ -443,7 +476,7 @@ func New(opts Options) *Agent {
 		a.models = func() ModelChoice { return ModelChoice{} }
 	}
 	if a.info == nil {
-		a.info = func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }
+		a.info = func(_ *provider.ModelData, id, model string) llm.Model { return llm.Model{Provider: id, ID: model} }
 	}
 	a.byName = map[string]tool.Tool{}
 	for _, t := range a.tools {
@@ -600,6 +633,7 @@ func (a *Agent) NewSession(ctx context.Context, p acp.NewSessionRequest) (acp.Ne
 		autoCompactOff: ss.AutoCompactionOff, noAutoResize: ss.NoAutoResize, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, p.Cwd, a.storedRules(cmp.Or(ss.ProjectRoot, p.Cwd)))}
+	a.takeModelData(s) // its document, kept for its life (0072-MADR D19)
 	if len(forked) > 0 {
 		for _, e := range forked {
 			if err := log.Append(ctx, e); err != nil {
@@ -795,13 +829,13 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	// the live session sends the bytes a resumed one sends from the entry
 	// (0005-PLAN F3-4; 0037-MADR D42).
 	chosen, think := a.choices(s)
-	files, pics := promptAttachments(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}, takesImages(a.info(a.providerID(s, model), chosen), model), !s.noAutoResize)
+	files, pics := promptAttachments(p.Prompt, s.cwd, fsx.Workspace{Roots: s.env().Roots}, takesImages(a.modelOf(s, a.providerID(s, model), chosen), model), !s.noAutoResize)
 	if files != "" {
 		prompt.Content = append([]llm.Content{{Type: llm.ContentText, Text: files}}, prompt.Content...)
 	}
 	prompt.Content = append(prompt.Content, pics...)
 	prompt = asEntry(prompt)
-	think = catalog.Clamp(a.levelsOf(a.provOf(s), chosen), think) // as thought_level shows it
+	think = catalog.Clamp(a.levelsOf(s, a.provOf(s), chosen), think) // as thought_level shows it
 	w := writer{a: a, s: s, ctx: context.WithoutCancel(ctx), provider: a.providerID(s, model), model: chosen, written: map[string]bool{}}
 	// The system prompt's baseline or patch comes before the user's message,
 	// as Pi puts a system patch before it (0005-PLAN F3-1).
@@ -891,7 +925,7 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 	}
 	var last llm.Usage
 	env := s.env()
-	env.Images = takesImages(a.info(w.provider, chosen), model)
+	env.Images = takesImages(a.modelOf(s, w.provider, chosen), model)
 	env.Environ = markers(string(s.id), a.fileOf(s), w.provider, chosen, think)
 	env.Instructions = a.instructions(s)
 	a.mu.Lock()
@@ -970,8 +1004,8 @@ func (a *Agent) Prompt(ctx context.Context, p acp.PromptRequest) (acp.PromptResp
 // discovery: the prompt, already written, joins the live history as a
 // cancelled turn's does, and no limit was computed, recorded or noted
 // (0066-MADR S40; 0071-PLAN Phase 2b's review).
-func (a *Agent) cancelledWaiting(s *liveSession, provider, model string, prompt llm.Message) (acp.PromptResponse, error) {
-	msgs := stamped([]llm.Message{prompt}, llm.Origin{Provider: provider, Model: model}, true)
+func (a *Agent) cancelledWaiting(s *liveSession, providerID, model string, prompt llm.Message) (acp.PromptResponse, error) {
+	msgs := stamped([]llm.Message{prompt}, llm.Origin{Provider: providerID, Model: model}, true)
 	a.mu.Lock()
 	s.history = append(s.history, msgs...)
 	a.mu.Unlock()
@@ -1238,7 +1272,7 @@ func (w *writer) event(ev agent.Event) {
 	case agent.Queued:
 		w.add(session.Entry{Type: session.TypeMessage, Message: userEntryMessage(ev.Message, ts())})
 	case agent.Message:
-		m, err := assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.provider, w.model), ts())
+		m, err := assistantEntryMessage(ev, w.provider, w.model, w.a.modelOf(w.s, w.provider, w.model), ts())
 		if err != nil || ev.Err == nil {
 			w.addEntry(session.Entry{Type: session.TypeMessage, Message: m}, err)
 			return
@@ -1267,12 +1301,18 @@ func (w *writer) event(ev agent.Event) {
 	}
 }
 
-// sessionProvider builds s's provider on first use, with s's id, and keeps
-// it for the session (0021-MADR D4). A failed build is not kept.
+// sessionProvider builds s's provider on first use, with s's document and
+// id, and keeps it for the session (0021-MADR D4; 0072-MADR D17, M86). A
+// failed build is not kept. A session that began with none is rebuilt once,
+// when it takes its first document: its next prompt or compaction builds
+// with it, and a call under way keeps the provider it took; a session that
+// holds a document keeps its provider through every refresh (0072-MADR D22,
+// M71).
 func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
+	data := a.dataOf(s)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if s.provider != nil {
+	if s.provider != nil && s.builtWith == data {
 		return s.provider, nil
 	}
 	build := a.provider
@@ -1280,17 +1320,28 @@ func (a *Agent) sessionProvider(s *liveSession) (llm.Provider, error) {
 		if a.providerFor == nil {
 			return nil, ErrNoProvider
 		}
-		build = func(sid string, retry llm.Retry) (llm.Provider, error) { return a.providerFor(id, sid, retry) }
+		build = func(d *provider.ModelData, sid string, retry llm.Retry) (llm.Provider, error) {
+			return a.providerFor(d, id, sid, retry)
+		}
 	}
 	if build == nil {
 		return nil, ErrNoProvider
 	}
-	p, err := build(string(s.id), s.retry)
+	p, err := build(data, string(s.id), s.retry)
 	if err != nil {
 		return nil, err
 	}
-	s.provider = p
+	s.provider, s.builtWith = p, data
 	return p, nil
+}
+
+// currentData is the process's current document, nil for none or with no
+// hook: what a read no session makes is built with (0072-MADR M86).
+func (a *Agent) currentData() *provider.ModelData {
+	if a.modelData == nil {
+		return nil
+	}
+	return a.modelData()
 }
 
 // userMessage is the prompt's text, and its images, as one user message
@@ -1319,7 +1370,7 @@ func userMessage(blocks []acp.ContentBlock) llm.Message {
 // (0036-MADR D8; 0008-MADR D19).
 func (a *Agent) promptImage() bool {
 	choice := a.models()
-	info := a.info(choice.Provider, cmp.Or(a.override.Model, choice.Default))
+	info := a.modelOf(nil, choice.Provider, cmp.Or(a.override.Model, choice.Default)) // no session: the current document
 	if slices.Contains(info.Input, "image") {
 		return true
 	}
@@ -1329,7 +1380,7 @@ func (a *Agent) promptImage() bool {
 	if a.provider == nil {
 		return false
 	}
-	p, err := a.provider("", llm.Retry{Off: true})
+	p, err := a.provider(a.currentData(), "", llm.Retry{Off: true}) // no session: the current document
 	if err != nil || p == nil {
 		return false
 	}
@@ -1395,6 +1446,7 @@ func (a *Agent) open(ctx context.Context, id acp.SessionId, cwd string, extra []
 		autoCompactOff: ss.AutoCompactionOff, noAutoResize: ss.NoAutoResize, voice: a.voiceOf(ss), insultsAccepted: ss.BombasticAccepted,
 		root: ss.ProjectRoot, trust: ss.Trust, project: projectOf(ss.Project),
 		rules: engineOf(ss, cwd, a.storedRules(cmp.Or(ss.ProjectRoot, cwd)))}
+	a.takeModelData(s) // the document current at its load or resume (0072-MADR D19)
 	a.restore(s, log.Entries())
 	if err := a.takeSystemPrompt(ctx, s, client); err != nil {
 		return nil, errors.Join(appendFailed(err), log.Close())
@@ -1575,10 +1627,10 @@ func takesImages(info llm.Model, p llm.Provider) bool {
 // markers are the 0003-MADR markers a session's commands see: AI_AGENT, and
 // the session, its file, the provider, the model and the thinking level.
 // An empty value is left out.
-func markers(id, file, provider, model, think string) []string {
+func markers(id, file, providerID, model, think string) []string {
 	out := []string{"AI_AGENT=gobble"}
 	for _, kv := range [][2]string{
-		{"GOBBLE_SESSION_ID", id}, {"GOBBLE_SESSION_FILE", file}, {"GOBBLE_PROVIDER", provider},
+		{"GOBBLE_SESSION_ID", id}, {"GOBBLE_SESSION_FILE", file}, {"GOBBLE_PROVIDER", providerID},
 		{"GOBBLE_MODEL", model}, {"GOBBLE_THINKING_LEVEL", think},
 	} {
 		if kv[1] != "" {

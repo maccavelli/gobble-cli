@@ -229,6 +229,21 @@
 #   autoResize: true
 
 # ---------------------------------------------------------------------
+# Model data
+# ---------------------------------------------------------------------
+
+# gobble keeps a copy of models.dev's model data (each model's name,
+# window, output limit and prices) in its cache directory. A model call
+# or a models command downloads it again, in the background, once it is
+# refreshHours old; 0 never downloads it on its own, and gobble models
+# refresh still does. A run warns once when it is older than warnDays;
+# 0 never warns. A project's settings cannot set these; this file and
+# --set can.
+# modelData:
+#   refreshHours: 24
+#   warnDays: 7
+
+# ---------------------------------------------------------------------
 # Editor
 # ---------------------------------------------------------------------
 

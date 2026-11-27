@@ -17,6 +17,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/permission"
 	"github.com/maccavelli/gobble-cli/tool"
 	"github.com/maccavelli/gobble-cli/tool/builtin"
@@ -65,7 +66,7 @@ func (g *globalFile) texts() []string {
 // perms, with tools (nil is the built-ins), to client.
 func answersAgent(t *testing.T, p llm.Provider, client *acptest.Client, ss SessionSettings, perms PermissionOptions, tools []tool.Tool) *acptest.Conn {
 	t.Helper()
-	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+	a := New(Options{Version: "1.2.3", NewID: counterIDs(), Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Tools: tools, Settings: func(string) SessionSettings { return ss }, Permissions: perms, Logger: slog.New(slog.DiscardHandler)})
 	c := acptest.Connect(t, a, client)
 	a.SetConnection(c.Agent)

@@ -43,6 +43,16 @@ M64 gains `TestBinaryCompletionMode`; five cases put to the owner by the PLAN's 
 *(2026-11-25, fifth addition at the end: Phase 1's review, and the owner's "Follow any, but refuse https→http
 (Recommended)", M82.)*
 
+*(2026-11-25, sixth addition at the end: Phase 2 built; Q-F put to the owner.)*
+
+*(2026-11-26, seventh addition at the end: Phase 2's review and the owner's rulings "Keep 'none', ship 2 and 3 together", "A
+cancel doesn't gate or warn (Recommended)" and, on Q-F, "Builders take the document (Recommended)", M83 to M86.)*
+
+*(2026-11-26, eighth addition at the end: "Unfinished attempts gate only briefly (Recommended)", M87.)*
+
+*(2026-11-26, ninth addition at the end: Phase 2b's review; D21 gains `Options.Discover`'s document, under D17; M46's
+leftover window; D12's singular.)*
+
 ## Context and Problem Statement
 
 Every fact gobble knows of a model without asking its provider (its name, window, output cap, input kinds, reasoning and
@@ -79,7 +89,7 @@ built-in model data. This record decides every case of that store.
 | Case 11. Redirects | "Follow any, record the asked URL" | M58 |
 | Call 1. A session that began with no data | "Pick up the first download (Recommended)" | M61, M71 |
 | Call 2. `--force` and an empty document | "Still refuse an empty document (Recommended)" | M14, M68 |
-| Call 3. What gates the hour | "Any attempt gates an hour (Recommended)" | M26, M67 |
+| Call 3. What gates the hour | "Any attempt gates an hour (Recommended)" *(2026-11-26, "A cancel doesn't gate or warn (Recommended)": a cancelled attempt is not counted, M84)* | M26, M67 |
 | Call 4. The document and `provider.New` (the coordinator's answer to the question in it: not hard-coded; gobble passes the downloaded or disk document to `New` at run time) | "for both 0093 and here, i want to hand to provider.New, but does that mean it is hard coded?" | M62, M71 to M73 |
 | The SDK's 0093 Q4 | "Requests read only New's document (Recommended)" | M73 |
 | *(2026-11-25)* gobble pins `v1.33.0` first (0071's Phase 2), then builds this record on it; its `v1.32.0`-only steps are dropped | "gobble: v1.33.0 pin first, then 0072 (Recommended)" | M22, M54, M55, M62; D14, D17, D21 |
@@ -234,6 +244,9 @@ for one document a rename already writes atomically. D hard-codes data.
   fetched N days ago from models.dev; gobble models refresh fetches it again", adding "; the last download was refused:
   REASON; gobble models refresh --force accepts it" or "; the last download failed: KIND" from `attempt.json`. `gobble acp`
   logs it at warn once per process and writes nothing to stderr. `gobble models list`'s stdout is unchanged.
+  *(2026-11-26, Phase 2's review: "--force accepts it" follows only a refusal `--force` passes; for "it holds no models",
+  which `--force` never saves (D6, M68), the refusal is named without it, as M43's line is. A cancelled attempt is named
+  neither as a refusal nor as a failure, M84.)*
 * **D13. No data when none is in use** (a never-online first run, a pinned run with no copy): no window (no automatic
   compaction until the service refuses), 0071's assumed 16,384 cap, no prices, thinking levels off to `xhigh`, curated ids
   only, "-" for every fact in `gobble models list`. One warning per run on stderr (`gobble acp`: the log), when the run is
@@ -284,6 +297,12 @@ for one document a rename already writes atomically. D hard-codes data.
   temporary file and `fsx.ReplaceFile`; the last writer wins. An unreadable `attempt.json` is no attempt: logged once, a
   refresh allowed, replaced by the next write. Its `started` time gates every process's automatic refresh for an hour,
   whatever the result; an attempt left `started` by a process that died gates no longer than that hour.
+  *(2026-11-26, "A cancel doesn't gate or warn (Recommended)": `result` may also be `canceled`, a refresh the run's own
+  context ended (an exit's cancel, a signal); such an attempt gates no process and is not reported as a failure. An attempt a
+  cancelled process never got to record stays `started` and gates its hour, as a dead process's does: the exit does not wait
+  for the write (D20). M84.)*
+  *(2026-11-26, "Unfinished attempts gate only briefly (Recommended)": superseding "gates its hour" for an attempt with no `finished`: such an attempt gates
+  other processes for 120 s only; a finished one gates the hour, a `canceled` one nothing. M87.)*
 * **D19. A session's facts.** Each ACP session takes the process's current `provider.ModelData` when it is created, loaded or
   forked, and keeps it until it ends; its calls, `/context`, compaction and (from Phase 4) its providers read it. A session
   that began with none takes the first download when it lands and keeps that one from then on (call 1; D22). The
@@ -303,6 +322,8 @@ for one document a rename already writes atomically. D hard-codes data.
   `ModelDataStamp`, `(*ModelData).Stamped`, `(*ModelData).Document()` and `ModelDataURL` (M77), and the session's
   `*provider.ModelData` as the first argument of `acpserver.Options.ModelInfo` and `Options.CachedLimits` (M80). See the
   fourth addition.)*
+  *(2026-11-26, "Builders take the document (Recommended)": and as the first argument of `acpserver.Options.Provider`,
+  `Options.ProviderFor` and `TitleOptions.Provider` (M86). See the seventh addition.)*
 
 ### Consequences
 
@@ -356,7 +377,7 @@ Each decided row's plant is in the PLAN, one to one. "Copy" is the disk copy; "c
 | M23 | The source URL | decided | `https://models.dev/api.json`, a constant; no setting | `TestFetchModelData_0072` asserts it | D4; Q1 |
 | M24 | What starts a refresh | decided | a due copy before a model call, or in `models list`, `info`, `refresh`; nothing else | `TestModelDataRefreshTrigger_0072/model_call`, `…/models_cmds`, `…/initialize_no_fetch`, `…/context_no_fetch` | D8; case 1 |
 | M25 | Several model calls while one refresh runs | decided | one refresh per process | `…/one_in_flight` | D8 |
-| M26 | An attempt by any process started within the hour | decided | no automatic refresh in any process; the command ignores it | `…/attempt_within_hour`, `…/other_process_attempt` | D8, D18; case 7 |
+| M26 | An attempt by any process started within the hour | decided | no automatic refresh in any process; the command ignores it *(2026-11-26: but an attempt recorded `canceled` is not counted, M84; one left `started`, with no `finished`, holds back only 120 s, M87)* | `…/attempt_within_hour`, `…/other_process_attempt` | D8, D18; case 7 |
 | M27 | Another process wrote a copy not due | decided | read first, made current, nothing fetched | `…/recheck` | D8 |
 | M28 | The run ends with a refresh under way | decided | `acp` and interactive cancel at once and do not wait; headless and the `models` commands wait up to 5 s with the write, then cancel; `gobble acp` still exits 0 within 2 s, no stderr | `TestModelDataRunEnd_0072` (`acp`, `interactive`, `headless`, `models`); `TestGobbleACPBinary` | D20; case 2 |
 | M29 | Shell completion | decided | loads, never fetches | `TestCompletionStartsNoRefresh_0072` | D8; case 1 |
@@ -371,12 +392,12 @@ Each decided row's plant is in the PLAN, one to one. "Copy" is the disk copy; "c
 | M38 | `gobble models info` | decided | a last `data` line, D12's words | `TestModelsInfoData_0072` | D12 |
 | M39 | The copy is older than `warnDays` | decided | one stderr warning per run, with the last attempt's refusal and `--force`, or its failure kind; `gobble acp` logs it once | `TestModelDataWarning_0072/past`, `…/refused`, `…/failed`, `…/acp_log_once` | D12; case 5 |
 | M40 | `warnDays: 0`; `gobble models list`'s stdout | decided | no age warning; stdout unchanged | `…/off`, `…/list_stdout` | D12 |
-| M41 | `gobble models refresh` saves | decided | exit 0; "Model data: fetched from models.dev at TIME UTC: N models in K sections; it replaces the copy fetched TIME." (or "; unchanged since the copy fetched TIME.", "; not modified since TIME.", "; there was no copy.") | `TestModelsRefreshCmd_0072/saved`, `…/unchanged`, `…/not_modified`, `…/first` | D9 |
+| M41 | `gobble models refresh` saves | decided | exit 0; "Model data: fetched from models.dev at TIME UTC: N models in K sections; it replaces the copy fetched TIME." (or "; unchanged since the copy fetched TIME.", "; not modified since TIME.", "; there was no copy.") *(2026-11-26, Phase 2's review: "1 model" and "1 section" in the singular, "N models" and "K sections" otherwise)* | `TestModelsRefreshCmd_0072/saved`, `…/unchanged`, `…/not_modified`, `…/first` | D9 |
 | M42 | It cannot fetch | decided | exit 1; "Error: model data: could not fetch URL: REASON; the copy fetched TIME is kept." (or "there is no copy.") | `…/offline`, `…/status`, `…/timeout_120s` | D9 |
 | M43 | A guard refuses | decided | exit 1; "Error: model data: the document from URL was not saved: REASON; the copy fetched TIME is kept. gobble models refresh --force saves it." | `…/refused` | D9 |
 | M44 | It cannot save | decided | exit 1; "Error: model data: fetched from URL but not saved: ERROR." | `…/not_saved` | D9 |
 | M45 | An extra argument | decided | exit 2, the usage error | `…/usage` | D9 |
-| M46 | Interrupted | decided | nothing written; the interrupt's exit code (130 for SIGINT) | `…/interrupted` | D9 |
+| M46 | Interrupted | decided | nothing written; the interrupt's exit code (130 for SIGINT) *(2026-11-26: the context is checked again just before the copy's atomic write; an interrupt during that write, its temporary file and rename, may still leave the new copy, the one window left)* | `…/interrupted` | D9 |
 | M47 | The built-in copy, `Snapshot`, `Source`, `gen_catalog.py` | decided | removed in Phase 3, on `v1.32.0`; the build 515,680 bytes smaller | `TestNoEmbeddedModelData_0072` (`llm/catalog` embeds no file) | D14; Q3 |
 | M48 | Existing tests that read model facts, after removal | decided | read the 2026-10-14 document from test data; no expected value changes | `TestModelDataTestdataInstalled_0072` in each such test binary | D14 |
 | M49 | `NOTICE` | decided | every file it names exists (a guard, green at the base); it names the test data's licence after Phase 3 | `TestNoticeNamesExistingFiles_0072` | D15 |
@@ -584,3 +605,76 @@ directory (its temporary file is `.<name>.gobble-<hex>.tmp`, and a file with mor
 that writer does for every file); the sweep reads the directory with `os.ReadDir` and also removes `attempt.json`'s temporary
 files; D4's 32 MiB body limit is gobble's own, ahead of the SDK's. Counts after this addition: 79 decided, 2 out of scope, 1
 struck, 0 open; 82 rows.
+
+### Sixth addition (2026-11-25): Phase 2 built; Phase 2b put to the owner
+
+The PLAN's Phase 2 is built (its execution record of this date). F4 was re-grounded at the SDK's `v1.33.0`: `catalog.WithMetadata`
+is at `llmprovider/catalog/model_metadata.go:242-260`, as the first amendment says. One case of Phase 2b is not decided here,
+so Phase 2b stops before its build:
+
+* **Q-F. How the session's document reaches `provider.New`** (D17, D21, M62, M71). D17 hands the session's document to every
+  `provider.New` gobble calls for that session (the turn's, compaction's, a switched provider's and the title's). Those are
+  built by `acpserver.Options.Provider`, `Options.ProviderFor` and `TitleOptions.Provider`, which take a session id and retry
+  settings and no document; D21 names no change to them, and `internal/cli`, which builds the providers, cannot map a session
+  id to the document the session took at its start (D19). Q-D answered the same question for the `ModelInfo` and
+  `CachedLimits` hooks only. The PLAN's Phase 2b stop lists three resolutions.
+
+No row is changed until Q-F is answered.
+
+### Seventh addition (2026-11-26): Phase 2's review; Q-F answered
+
+The coordinator relayed an independent review (`code-reviewer`) of Phase 2 and the owner's rulings, each quoted exactly. The
+review's other findings are fixes inside rows already decided (the PLAN's deviation of this date lists them, with their
+tests); one is the coordinator's call, recorded as such.
+
+| Ruling, as given | Label | Rows |
+| :--- | :--- | :--- |
+| Before Phase 3, the "none" line and D13's warning read "none" while the built-in copy answers (the PLAN's Phase 2 reading 5) | "Keep 'none', ship 2 and 3 together" | M83 |
+| A refresh cancelled by an `acp` or interactive exit | "A cancel doesn't gate or warn (Recommended)" | M84; D18, M26, M67 |
+| Q-F. How the session's document reaches `provider.New` | "Builders take the document (Recommended)" | M86; D17, D21, D22, M62, M71 |
+| `gobble version` and `gobble config path`, which 0008-PLAN's P4 record says create no state directory and no log file, ran D7's load, whose D3 warning opens the log | the coordinator's call (the task brief of 2026-11-26), on 0008-PLAN's promise | M85; D7 |
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| M83 | A gobble release holding Phase 2 but not Phase 3 | decided | none is cut: Phases 2 and 3 ship in one release (the PLAN's Rollout), so the "none" line and D13's warning, which read "none" while the built-in copy answers before Phase 3, never reach a user in that state; the display's words stay | the PLAN's Rollout and its Phase 2 reading 5 (records) | the owner's ruling above |
+| M84 | A refresh the run's own context cancels: `gobble acp`'s or the interactive CLI's exit, a headless run's or a `models` command's after its 5 s, a signal | decided | `attempt.json` records `result: canceled` (no reason); it gates no process's automatic refresh, this one's or another's; neither warning names it (the age warning adds no failure clause, D13's warning is not given for it); an attempt left `started` because its process ended before that write gates its hour (D18, D20) *(2026-11-26: gates 120 s only, M87)* | `TestModelDataRefreshTrigger_0072/canceled_no_gate`; `TestModelDataWarning_0072/canceled`, `…/none_canceled`; `TestModelDataRunEnd_0072` (each blocked case records `canceled`) | the owner's ruling above; D18, D20 |
+| M85 | `gobble version`, `gobble config path` | decided | the copy is not loaded: an unreadable copy logs nothing, and the run creates no state directory and no log file; every other command loads it first (D7) | `TestModelDataNotLoadedForLogFree_0072` | the coordinator's call above; 0008-PLAN P4 |
+| M86 | Each `provider.New` gobble calls for a session (Phase 2b) | decided | `acpserver.Options.Provider`, `Options.ProviderFor` and `TitleOptions.Provider` take the session's `*provider.ModelData` first, as M80's hooks do; `acpserver` passes the session's document (`dataOf`) to every build, the turn's, compaction's, a switched provider's and the title's, and `initialize`'s image check, which has no session, the current one; `internal/cli`'s builders set `provider.Options.ModelData`, which `New` hands the SDK by `catalog.WithMetadata`; nil hands none; the test literals take the argument, no assertion changes | M62's `TestProviderGetsSessionModelData_0072`; M71's and M72's tests | Q-F |
+
+What these change above, as annotations: D12 (the `--force` clause), D18 (`canceled`), M26 and Call 3 (a cancel not
+counted), M41 (singular and plural). D21 gains M86's three signatures. Counts after this addition: 83 decided, 2 out of scope,
+1 struck, 0 open; 86 rows.
+
+### Eighth addition (2026-11-26): unfinished attempts
+
+The coordinator relayed the owner's ruling on the case the Phase 2 pass 2 hand-back raised (a cancel whose process exits
+before recording `canceled` leaves `started`, which gated the hour), quoted exactly:
+
+| Ruling, as given | Label | Rows |
+| :--- | :--- | :--- |
+| An attempt left `started`, with no `finished` (a process killed, or exiting before its write) | "Unfinished attempts gate only briefly (Recommended)" | M87; D18, M26, M84 |
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| M87 | `attempt.json` records `started` and no `finished`, written by another process (or an earlier run) | decided | it holds back every process's automatic refresh for 120 s from its `started` time, then nothing: 120 s is the longest a download runs (the command's deadline, D4), which covers the background's 30 s with 90 s to spare. A finished attempt (`ok`, `not_modified`, `failed`, `refused`, `not_saved`) holds back the hour (M26); a `canceled` one nothing (M84). Cost: a process that crashes mid-download on every run could retry about every 2 minutes | `TestModelDataRefreshTrigger_0072/started_stale` (171 s old: fetches), `…/started_fresh` (30 s old: holds back) | the owner's ruling above; D4, D18 |
+
+What this changes above, as annotations: D18 (an unfinished attempt), M26, M84. Counts after this addition: 84 decided, 2 out
+of scope, 1 struck, 0 open; 87 rows.
+
+### Ninth addition (2026-11-26): Phase 2b's review
+
+An independent review of Phases 2 and 2b, relayed by the coordinator, PASS WITH NOTES. Its findings are fixes inside decided
+rows; the PLAN's deviation of this date lists them with their tests. What they change here, as annotations, no row's outcome
+changing:
+
+* **D17, D21, M62.** D17 hands the session's document "to every lookup"; the agent's `Discover` hook, which runs discovery, a
+  lookup of every source of a model's limits, read the current one. `acpserver.Options.Discover` takes the session's
+  `*provider.ModelData` after its context (D21 gains it beside M80's and M86's), and `internal/cli` hands it as
+  `provider.Options.ModelData`.
+* **M46.** The interrupt is checked again just before the copy's atomic write. The one window left is that write itself (the
+  temporary file and its rename): an interrupt arriving inside it may still leave the new copy.
+* **D12.** The age warning says "1 day ago" in the singular, as M41's counts do.
+* **The SDK's limits cache** holds no document and is keyed apart from it (provider, base URL, scope, credential), so a session
+  reads the service's cached facts beside its own document (the PLAN's deviation cites the SDK's lines).
+
+Counts unchanged: 84 decided, 2 out of scope, 1 struck, 0 open; 87 rows.

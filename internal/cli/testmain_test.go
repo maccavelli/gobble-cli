@@ -75,6 +75,11 @@ func offlineModelData(context.Context, string, provider.Options) (*provider.Mode
 // reads the host's cache (0072-MADR D10).
 func noModelDataCopy(string) (*provider.ModelData, error) { return nil, fs.ErrNotExist }
 
+// noAutoModelData is the tests' automatic refresh: it starts nothing, so a
+// test's model call starts no refresh whose writes outlive its run; the
+// trigger's own tests install the real one (0072-PLAN's Phase 2 entry).
+func noAutoModelData(*runEnv) {}
+
 // The tests' browser opener and sign-ins are TestMain's, which open and
 // call nothing; compared by identity, so this test calls none of them
 // (0025-PLAN deviation 9).
@@ -87,6 +92,11 @@ func TestNoBrowserOrSignIn(t *testing.T) {
 		"modelFacts":  same(modelFacts, offlineModelFacts),
 		// 0071-MADR P37: the discovery TestMain set reads nothing.
 		"discoverLimits": same(discoverLimits, offlineDiscover),
+		// 0072-MADR D10, M34: no test fetches model data, reads the host's
+		// copy, or starts an automatic refresh.
+		"fetchModelData":     same(fetchModelData, offlineModelData),
+		"loadModelData":      same(loadModelData, noModelDataCopy),
+		"startAutoModelData": same(startAutoModelData, noAutoModelData),
 	} {
 		if !ok {
 			t.Errorf("%s is not TestMain's: a test could open a browser or sign in", name)
@@ -154,6 +164,7 @@ func TestMain(m *testing.M) {
 	modelFacts = offlineModelFacts
 	discoverLimits = offlineDiscover
 	fetchModelData, loadModelData = offlineModelData, noModelDataCopy
+	startAutoModelData = noAutoModelData
 	openURL, signInWith, logoutLogin = noBrowser, noSignIn, noLogout
 	unownedListing = recordUnowned
 	code := m.Run()

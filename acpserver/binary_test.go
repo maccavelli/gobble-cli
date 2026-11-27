@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,6 +54,39 @@ func withoutCredentials(env []string) []string {
 	})
 }
 
+// closedProxy is where the proxy variables point: nothing listens there, so
+// a request that escapes fails on this machine (0072-MADR D10, M64).
+const closedProxy = "http://127.0.0.1:9"
+
+// withClosedProxies is env with every proxy variable naming closedProxy and
+// no host exempt.
+func withClosedProxies(env []string) []string {
+	names := []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy"}
+	out := slices.DeleteFunc(slices.Clone(env), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(n, name) })
+	})
+	for _, n := range names[:4] {
+		out = append(out, n+"="+closedProxy)
+	}
+	return out
+}
+
+// modelDataUnder are the model-data directories under home.
+func modelDataUnder(t *testing.T, home string) []string {
+	t.Helper()
+	var found []string
+	if err := filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() && d.Name() == "model-data" {
+			found = append(found, p)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
 type buildError struct {
 	out string
 	err error
@@ -89,8 +123,9 @@ func TestGobbleACPBinary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	home := t.TempDir()
 	cmd := exec.CommandContext(t.Context(), bin, "acp")
-	cmd.Env = append(withoutCredentials(os.Environ()), "GOBBLE_HOME="+t.TempDir())
+	cmd.Env = withClosedProxies(append(withoutCredentials(os.Environ()), "GOBBLE_HOME="+home))
 	var stderr, wire syncBuffer
 	cmd.Stderr = &stderr
 	// agentproc owns the pipes, records the wire, and on Close ends the
@@ -127,6 +162,11 @@ func TestGobbleACPBinary(t *testing.T) {
 	}
 	if s := stderr.String(); s != "" {
 		t.Fatalf("gobble acp wrote to stderr: %q", s)
+	}
+	// 0072-MADR M64: initialize, session/new and a refused prompt start no
+	// refresh, so no model data is written under the run's home.
+	if found := modelDataUnder(t, home); len(found) > 0 {
+		t.Fatalf("gobble acp wrote model data: %q", found)
 	}
 	lines := strings.Split(strings.TrimSuffix(wire.String(), "\n"), "\n")
 	if len(lines) < 4 {

@@ -9,6 +9,7 @@ import (
 	"github.com/maccavelli/gobble-cli/acpclient/acptest"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -19,9 +20,9 @@ func overrideAgent(t *testing.T, dir string, o Override, p llm.Provider) (c *acp
 	t.Helper()
 	ag := New(Options{
 		Version:  "1.2.3",
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
 		Models:   func() ModelChoice { return testModels },
-		ModelInfo: func(provider, model string) llm.Model {
+		ModelInfo: func(_ *provider.ModelData, provider, model string) llm.Model {
 			m := catalogModels[model]
 			m.Provider, m.ID = provider, model
 			return m

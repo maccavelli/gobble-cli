@@ -34,7 +34,7 @@ func (a *Agent) contextEstimate(s *liveSession, tools jsontext.Value) int {
 // ladder sends again at, is learned, and a completed request's output
 // reported to the saved caps (0071-MADR P25, P34).
 func (a *Agent) compactionModel(s *liveSession, p llm.Provider, providerID, model, think string) compaction.Model {
-	info := a.modelOf(providerID, model)
+	info := a.modelOf(s, providerID, model)
 	c, from, _ := outputCap(info)
 	watched := watchCalls(p, a.outputSeen(providerID), a.observedSaved(s, providerID))
 	return compaction.Model{Provider: watched, Model: model, Thinking: think, MaxTokens: c, MaxTokensFrom: from, Window: windowOf(info)}
@@ -104,7 +104,7 @@ type turnLimits struct {
 func (l *turnLimits) limit(req *llm.Request) llm.OutputLimit {
 	lim := llm.OutputLimit{Tokens: req.MaxTokens, Basis: llm.BasisRefusal}
 	if req.MaxTokens <= 0 {
-		info := l.a.modelOf(l.provider, l.model)
+		info := l.a.modelOf(l.s, l.provider, l.model)
 		c, from, held := outputCap(info)
 		lim = llm.FitOutput(c, from, windowOf(info), l.a.contextEstimate(l.s, req.Tools))
 		if held > 0 && lim.Basis == llm.BasisUser {
@@ -336,7 +336,7 @@ func (a *Agent) outputLimitLine(s *liveSession, provider, model string) string {
 	case lim.Tokens > 0:
 		return fmt.Sprintf("Output limit: %s tokens on the last call (%s)\n", thousands(int64(lim.Tokens)), wordsOf(lim.Basis))
 	}
-	info := a.modelOf(provider, model)
+	info := a.modelOf(s, provider, model)
 	if info.MaxTokens <= 0 {
 		return "Output limit: none sent yet; the model's limit is unknown\n"
 	}

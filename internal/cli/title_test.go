@@ -8,6 +8,7 @@ import (
 
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // smallModel's provider is built by its own id and model, and names the
@@ -17,9 +18,9 @@ func TestSmallModelTitles(t *testing.T) {
 	small := llmtest.NewScript(llmtest.Text("Fix the login test"))
 	var built []string
 	old := smallProvider
-	smallProvider = func(_ *runEnv, id, model string) func(string, llm.Retry) (llm.Provider, error) {
+	smallProvider = func(_ *runEnv, id, model string) func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) {
 		built = append(built, id+"/"+model)
-		return func(string, llm.Retry) (llm.Provider, error) { return small, nil }
+		return func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return small, nil }
 	}
 	t.Cleanup(func() { smallProvider = old })
 

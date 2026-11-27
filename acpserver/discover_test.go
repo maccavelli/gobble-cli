@@ -50,7 +50,7 @@ type discoverRec struct {
 	ended chan struct{} // closed when a blocked discovery's context ends
 }
 
-func (d *discoverRec) discover(ctx context.Context, provider, model string) error {
+func (d *discoverRec) discover(ctx context.Context, _ *provider.ModelData, provider, model string) error {
 	d.mu.Lock()
 	d.calls = append(d.calls, provider+"/"+model)
 	d.mu.Unlock()
@@ -175,10 +175,12 @@ func TestSession_DiscoversBeforeFirstCall_0066(t *testing.T) {
 		Retry: &llm.Retry{Off: true}}
 	choice := ModelChoice{Provider: "claude", Models: []string{"claude-test-1"}, Default: "claude-test-1"}
 	ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider:  func(string, llm.Retry) (llm.Provider, error) { return provider.New("claude", o) },
-		Models:    func() ModelChoice { return choice },
-		ModelInfo: func(id, model string) llm.Model { return provider.ModelInfoWith(o, id, model, nil) },
-		Discover: func(ctx context.Context, id, model string) error {
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return provider.New("claude", o) },
+		Models:   func() ModelChoice { return choice },
+		ModelInfo: func(_ *provider.ModelData, id, model string) llm.Model {
+			return provider.ModelInfoWith(o, id, model, nil)
+		},
+		Discover: func(ctx context.Context, _ *provider.ModelData, id, model string) error {
 			return provider.Discover(ctx, o, id, model, nil)
 		}})
 	client := &acptest.Client{Allow: true}
@@ -243,7 +245,7 @@ func TestSession_TitleModelDiscovered_0066(t *testing.T) {
 	d := &discoverRec{}
 	small := llmtest.NewScript(llmtest.Text("A title"))
 	h := discovered(t, d, map[string]int{}, func(o *Options) {
-		o.Title = TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
+		o.Title = TitleOptions{Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
 	})
 	h.session()
 	waitFor(t, func() bool { return len(d.seen()) == 2 })
@@ -456,7 +458,7 @@ func TestSession_CompactFirstWaits_0066(t *testing.T) {
 func TestEachCallWaitsForItsModel_0071(t *testing.T) {
 	title := func(small *llmtest.Script) func(*Options) {
 		return func(o *Options) {
-			o.Title = TitleOptions{Provider: func(string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
+			o.Title = TitleOptions{Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return small, nil }, ProviderID: "small", Model: "s1"}
 		}
 	}
 	t.Run("turn", func(t *testing.T) {

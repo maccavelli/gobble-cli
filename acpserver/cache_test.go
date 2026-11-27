@@ -11,6 +11,7 @@ import (
 	"github.com/maccavelli/gobble-cli/compaction"
 	"github.com/maccavelli/gobble-cli/llm"
 	"github.com/maccavelli/gobble-cli/llm/llmtest"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 	"github.com/maccavelli/gobble-cli/session/jsonl"
 )
 
@@ -22,7 +23,7 @@ func cacheAgent(t *testing.T, p llm.Provider, settings func(string) SessionSetti
 	var built []string
 	a := New(Options{Version: "1.2.3", Models: func() ModelChoice { return testModels }, Store: jsonl.New(t.TempDir(), jsonl.Options{}),
 		Settings: settings, Compaction: compaction.Settings{ReserveTokens: 16384, KeepRecentTokens: 150},
-		Provider: func(id string, _ llm.Retry) (llm.Provider, error) {
+		Provider: func(_ *provider.ModelData, id string, _ llm.Retry) (llm.Provider, error) {
 			mu.Lock()
 			defer mu.Unlock()
 			built = append(built, id)

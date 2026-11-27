@@ -61,6 +61,9 @@ mcp:
   stopTimeoutMs: 2000
 images:
   autoResize: true
+modelData:
+  refreshHours: 24
+  warnDays: 7
 externalEditor: ""
 `
 	if got := string(Render(r, "", false)); got != want {

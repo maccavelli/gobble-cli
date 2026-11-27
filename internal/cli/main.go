@@ -43,6 +43,7 @@ func Main(ctx context.Context, args []string, stdin *os.File, stdout, stderr io.
 	// parsing, terminal detection, signals, logging and any file but the
 	// ones it completes (0008-MADR D17).
 	if completionMode(os.Getenv) {
+		loadCompletionModelData() // the copy, read and never fetched (0072-MADR D7, M29)
 		return complete.Run(ctx, k.Model, completionRegistry(), os.Getenv, args, stdout)
 	}
 	caps := term.Detect(os.Getenv, stdin, fileOf(stdout), fileOf(stderr))
@@ -89,6 +90,9 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	}
 	e := &runEnv{ctx: ctx, out: out, stdin: stdin, logs: logs, intr: intr, now: clock, overrides: overrides}
 	e.ownListings()
+	if !logFree(kctx.Command()) {
+		e.loadModelDataAtStart(ctx) // before any read of model facts, whatever the command (0072-MADR D7)
+	}
 	if e.migrateAuth(kctx.Command(), loginJSON(kctx)) {
 		err = kctx.Run(e)
 	} else {
@@ -96,12 +100,19 @@ func run(ctx context.Context, k *kong.Kong, root *Root, args []string, stdin *os
 	}
 	e.tellWaitWarn() // a warning a fallback queued, when no prompt's text came after it (0063-MADR D23, row R156)
 	code = exitCode(ctx, out, err)
+	e.endModelData()   // headless and models wait up to 5 s; acp and interactive do not (0072-MADR D20)
 	e.endListings(ctx) // before the log closes: a listing may still log (0046-MADR D1)
 	if err := logs.close(); err != nil {
 		out.Warnf("close log file: %v", err)
 	}
 	return code
 }
+
+// logFree reports whether command is one that creates no state directory
+// and no log file (0008-PLAN P4's choice "The logger is opened lazily"), so
+// it does not load the model data, whose unreadable copy would log
+// (0072-MADR M85, D3, D7).
+func logFree(command string) bool { return command == "version" || command == "config path" }
 
 // misplacedFlag refuses a flag of chat's given before another command.
 // Kong takes the default command's flags ahead of any command, so
@@ -286,6 +297,9 @@ type runEnv struct {
 	// D3, D18, M69).
 	modelDataMu     sync.Mutex
 	modelDataWarned map[string]bool
+	// modelData is the run's model data refresh, its end and its warnings
+	// (0072-MADR D8, D13, D20).
+	modelData modelDataOwner
 	// tools are the in-process agent's tools; nil is the built-ins.
 	tools []tool.Tool
 	// mcpOff and mcpAllow are the MCP tools the tool flags select, and

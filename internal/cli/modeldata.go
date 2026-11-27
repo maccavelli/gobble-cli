@@ -182,6 +182,10 @@ func sweepModelDataTemps(dir string, now time.Time) {
 	}
 }
 
+// errNoModels refuses a document with no section holding a model, which
+// --force does not pass (0072-MADR D6, M14, M68).
+var errNoModels = errors.New("it holds no models")
+
 // guardModelData is why got may not replace have, the copy, or nil
 // (0072-MADR D6): a document with no section holding a model is refused
 // always; against a copy from the same source, unless force, a section the
@@ -191,7 +195,7 @@ func sweepModelDataTemps(dir string, now time.Time) {
 func guardModelData(got, have *provider.ModelData, force bool) error {
 	sections := got.Sections()
 	if len(sections) == 0 {
-		return errors.New("it holds no models")
+		return errNoModels
 	}
 	if force || have == nil || have.Stamp().Source != got.Stamp().Source {
 		return nil
@@ -201,7 +205,7 @@ func guardModelData(got, have *provider.ModelData, force bool) error {
 		case m == 0:
 			return fmt.Errorf("its %s section is missing", key)
 		case 2*m < n:
-			return fmt.Errorf("its %s section has %d models, under half the copy's %d", key, m, n)
+			return fmt.Errorf("its %s section has %s, under half the copy's %d", key, plural(int64(m), "model"), n)
 		}
 	}
 	return nil
@@ -227,6 +231,10 @@ const (
 	attemptFailed      = "failed"
 	attemptRefused     = "refused"
 	attemptNotSaved    = "not_saved"
+	// attemptCanceled is a refresh the run's own context ended: an exit's
+	// cancel or a signal. It gates no process and is no failure ("A cancel
+	// doesn't gate or warn (Recommended)", M84).
+	attemptCanceled = "canceled"
 )
 
 // writeModelDataAttempt writes a as attempt.json at path.
@@ -282,20 +290,22 @@ type modelDataOutcome struct {
 	Reason string
 	Data   *provider.ModelData
 	Copy   *provider.ModelData
+	// Err is a failed fetch's error, for gobble models refresh's words.
+	Err error
 }
 
 // startModelDataRefresh starts one refresh in its own goroutine, on the
-// run's listing group, so the run owns it and ends it (0046-MADR D2), and
-// returns at once: no prompt, tool call or start-up waits for it, and
-// readers take the current document without a lock (0072-MADR D18, M65). It
-// reports false, starting nothing, once the run has ended its listings.
+// run's refresh owner, so the run owns it and ends it (0046-MADR D2;
+// 0072-MADR D20), and returns at once: no prompt, tool call or start-up
+// waits for it, and readers take the current document without a lock
+// (0072-MADR D18, M65). It reports false, starting nothing, once the run
+// has ended it.
 func (e *runEnv) startModelDataRefresh(mode modelDataMode, force bool) bool {
-	ctx := e.listingCtx()
-	return e.goListing(func() { e.refreshModelData(ctx, mode, force) })
+	return e.goModelData(func(ctx context.Context) { e.refreshModelData(ctx, mode, force) })
 }
 
 // refreshModelData is one refresh, the engine's body (0072-MADR D4 to D6,
-// D18): attempt.json marked started; the copy read again; one fetch under
+// D18): the copy read again; attempt.json marked started; one fetch under
 // the mode's deadline, sending the copy's validators; the guards; the save;
 // the document made current, saved or not; attempt.json marked with the
 // result. A failure changes nothing on disk or in memory.
@@ -306,46 +316,73 @@ func (e *runEnv) refreshModelData(ctx context.Context, mode modelDataMode, force
 		return modelDataOutcome{Result: attemptFailed, Reason: "no_cache_dir"}
 	}
 	copyPath, attemptPath := modelDataPaths(dirs)
+	return e.runModelDataRefresh(ctx, mode, force, copyPath, attemptPath, e.loadModelDataCopy(ctx, copyPath))
+}
+
+// runModelDataRefresh is refreshModelData once the copy, have, is read:
+// attempt.json marked started, the fetch, guards and save, attempt.json
+// marked with the result.
+func (e *runEnv) runModelDataRefresh(ctx context.Context, mode modelDataMode, force bool, copyPath, attemptPath string, have *provider.ModelData) modelDataOutcome {
 	source := modelDataSource
 	started := modelDataNow().UTC().Format(time.RFC3339)
 	e.recordModelDataAttempt(ctx, attemptPath, modelDataAttempt{Source: source, Started: started, Result: attemptStarted})
-	out := e.fetchAndKeepModelData(ctx, mode, force, copyPath, source)
+	out := e.fetchAndKeepModelData(ctx, mode, force, copyPath, source, have)
 	e.recordModelDataAttempt(ctx, attemptPath, modelDataAttempt{Source: source, Started: started,
 		Finished: modelDataNow().UTC().Format(time.RFC3339), Result: out.Result, Reason: out.Reason})
 	return out
 }
 
 // fetchAndKeepModelData is refreshModelData between its two attempt.json
-// writes.
-func (e *runEnv) fetchAndKeepModelData(ctx context.Context, mode modelDataMode, force bool, copyPath, source string) modelDataOutcome {
-	have := e.loadModelDataCopy(ctx, copyPath)
+// writes, with have, the copy as read. A run whose context ended before the
+// save keeps nothing it fetched: an interrupted refresh writes no copy, and
+// is recorded canceled (0072-MADR D9, D20, M46, M84).
+func (e *runEnv) fetchAndKeepModelData(ctx context.Context, mode modelDataMode, force bool, copyPath, source string, have *provider.ModelData) modelDataOutcome {
 	out := modelDataOutcome{Copy: have}
 	fetchCtx, cancel := context.WithTimeout(ctx, mode.wait())
 	defer cancel()
 	got, notModified, err := fetchModelData(fetchCtx, source,
 		provider.Options{ClientName: appName, ClientVersion: identity().Version, ModelData: have})
+	if err == nil && ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	if err != nil && ctx.Err() != nil { // the run ended it: a cancel, not a failure (M84)
+		out.Result, out.Err = attemptCanceled, err
+		return out
+	}
 	if err != nil {
-		out.Result, out.Reason = attemptFailed, modelDataFailure(err)
+		out.Result, out.Reason, out.Err = attemptFailed, modelDataFailure(err), err
 		return out
 	}
 	out.Result = attemptOK
 	if notModified {
 		out.Result = attemptNotModified
 	} else if err := guardModelData(got, have, force); err != nil {
-		e.warnModelData(ctx, "refused:"+err.Error(), "model data: a download was refused, and the copy kept",
+		e.warnModelDataTo(ctx, mode == modelDataCommand, "refused:"+err.Error(), "model data: a download was refused, and the copy kept",
 			slog.String("url", source), slog.String("reason", err.Error()))
 		out.Result, out.Reason = attemptRefused, err.Error()
 		return out
 	}
+	modelDataGuarded()
 	out.Data = got
 	provider.SetCurrentModelData(got) // current for this run, saved or not (M69)
+	if err := ctx.Err(); err != nil {
+		// An interrupt after the guards writes nothing (M46); the write itself,
+		// its temporary file and rename, is the one window left (0072-MADR's
+		// ninth addition).
+		out.Result, out.Err = attemptCanceled, err
+		return out
+	}
 	if err := writeModelDataCopy(copyPath, got); err != nil {
-		e.warnModelData(ctx, "not_saved", "model data: a download could not be saved; it is used for this run",
+		e.warnModelDataTo(ctx, mode == modelDataCommand, "not_saved", "model data: a download could not be saved; it is used for this run",
 			slog.String("path", copyPath), slog.String("error", err.Error()))
 		out.Result, out.Reason = attemptNotSaved, err.Error()
 	}
 	return out
 }
+
+// modelDataGuarded runs once a download has passed the guards, before it is
+// saved; a test sets it to cancel the run there (0072-MADR M46).
+var modelDataGuarded = func() {}
 
 // loadModelDataCopy is the copy at path, or nil: none, or a file that is no
 // copy, which is logged once per run with the path and the reason, and left
@@ -372,6 +409,12 @@ func (e *runEnv) recordModelDataAttempt(ctx context.Context, path string, a mode
 // warnModelData logs text at warn once per run for key, as "model data"
 // with text as its warning.
 func (e *runEnv) warnModelData(ctx context.Context, key, text string, attrs ...slog.Attr) {
+	e.warnModelDataTo(ctx, false, key, text, attrs...)
+}
+
+// warnModelDataTo is warnModelData, to the log file alone when fileOnly:
+// gobble models refresh says the same in its own error (0072-MADR D9).
+func (e *runEnv) warnModelDataTo(ctx context.Context, fileOnly bool, key, text string, attrs ...slog.Attr) {
 	e.modelDataMu.Lock()
 	if e.modelDataWarned[key] {
 		e.modelDataMu.Unlock()
@@ -382,7 +425,11 @@ func (e *runEnv) warnModelData(ctx context.Context, key, text string, attrs ...s
 	}
 	e.modelDataWarned[key] = true
 	e.modelDataMu.Unlock()
-	e.log().LogAttrs(ctx, slog.LevelWarn, "model data", append([]slog.Attr{slog.String("warning", text)}, attrs...)...)
+	logger := e.log()
+	if fileOnly {
+		logger = e.logs.fileOnly()
+	}
+	logger.LogAttrs(ctx, slog.LevelWarn, "model data", append([]slog.Attr{slog.String("warning", text)}, attrs...)...)
 }
 
 // modelDataFailure is a failed fetch's kind, as attempt.json's reason names

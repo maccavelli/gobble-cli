@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -17,8 +19,9 @@ import (
 // ModelsCmd lists the models gobble knows, or shows one (0005-MADR's CLI
 // surface; 0005-PLAN F4-2c).
 type ModelsCmd struct {
-	List ModelsListCmd `cmd:"" help:"List the models of the providers with a credential."`
-	Info ModelsInfoCmd `cmd:"" help:"Show what gobble knows of one model."`
+	List    ModelsListCmd    `cmd:"" help:"List the models of the providers with a credential."`
+	Info    ModelsInfoCmd    `cmd:"" help:"Show what gobble knows of one model."`
+	Refresh ModelsRefreshCmd `cmd:"" help:"Download the model data from models.dev now, whatever its age."`
 }
 
 // ModelsListCmd is gobble models list, and --list-models.
@@ -43,7 +46,25 @@ func (c *ModelsListCmd) Run(e *runEnv) error {
 	if c.Provider != "" && !e.knownProvider(c.Provider) {
 		return usageErrorf("unknown provider %q; gobble providers lists them", c.Provider)
 	}
-	return e.printModels(strings.Join(c.Search, " "), c.Provider, c.All)
+	return e.listModelsCmd(strings.Join(c.Search, " "), c.Provider, c.All)
+}
+
+// listModelsCmd is gobble models list and --list-models: the model data's
+// warning on stderr, the automatic refresh when it is due, which the run's
+// end waits for, and the list on stdout, unchanged (0072-MADR D8, D12, D20,
+// M40's list_stdout).
+func (e *runEnv) listModelsCmd(search, only string, all bool) error {
+	e.startModelsCmdData()
+	return e.printModels(search, only, all)
+}
+
+// startModelsCmdData is a models command's start: the warning, the
+// automatic refresh when it is due, and the wait for it at the run's end
+// (0072-MADR D8, D12, D20).
+func (e *runEnv) startModelsCmdData() {
+	e.warnModelDataAtStart(false)
+	e.waitModelDataAtEnd()
+	e.refreshModelDataIfDue()
 }
 
 // ModelsInfoCmd is gobble models info.
@@ -54,6 +75,7 @@ type ModelsInfoCmd struct {
 // Run resolves the model as --model resolves one and prints its facts.
 func (c *ModelsInfoCmd) Run(e *runEnv) error {
 	e.ensureSettingsFile()
+	e.startModelsCmdData()
 	mj := e.modelsJSON()
 	res, err := catalog.ResolveModel("", c.Model, "", offlineModels(e.ctx, mj), e.hasCredential)
 	if err != nil {
@@ -69,7 +91,81 @@ func (c *ModelsInfoCmd) Run(e *runEnv) error {
 	if err := discoverLimits(e.ctx, e.lookupOptions(id), id, model, mj); err != nil {
 		e.log().Debug("model limits discovery", slog.String("provider", id), slog.String("model", model), slog.Any("error", err))
 	}
-	return e.out.Result(modelInfo(modelFacts(e.lookupOptions(id), id, model, mj)))
+	info := modelInfo(modelFacts(e.lookupOptions(id), id, model, mj))
+	// Last, the data line, in /context's words (0072-MADR D12, M38).
+	return e.out.Result(fmt.Appendf(info, "%-8s  %s\n", "data", strings.TrimPrefix(e.currentModelDataLine(), "Model data: ")))
+}
+
+// ModelsRefreshCmd is gobble models refresh (0072-MADR D9).
+type ModelsRefreshCmd struct {
+	Force bool `help:"Save the download even when it lacks a section the copy has, or has under half its models; never one with no models."`
+}
+
+// Run downloads the model data now, whatever its age, the setting or the
+// hour's wait, as the command (120 s), saves it unless a guard refuses it,
+// and prints one line: exit 0 when it saved or was not modified, 1 when it
+// could not fetch, was refused or could not save; an interrupt writes
+// nothing (0072-MADR D9, M18, M41 to M46, M68).
+func (c *ModelsRefreshCmd) Run(e *runEnv) error {
+	e.ensureSettingsFile()
+	out := e.refreshModelData(e.ctx, modelDataCommand, c.Force)
+	if e.ctx.Err() != nil {
+		return e.ctx.Err() // an interrupt: its exit code, nothing printed
+	}
+	line, err := refreshWords(out)
+	if err != nil {
+		return err
+	}
+	return e.out.Result([]byte(line))
+}
+
+// refreshWords is gobble models refresh's line for out, or, for a failure, an
+// error in its words (0072-MADR M41 to M44).
+func refreshWords(out modelDataOutcome) (string, error) {
+	url, have := modelDataSource, out.Copy
+	kept := "there is no copy."
+	if have != nil {
+		kept = "the copy fetched " + modelDataTime(have.Stamp().Fetched) + " is kept."
+	}
+	switch out.Result {
+	case attemptFailed:
+		return "", failf("model data: could not fetch %s: %s; %s", url, failureWords(out), kept)
+	case attemptCanceled: // the run's end prints nothing; Run returns the interrupt first
+		return "", failf("model data: could not fetch %s: canceled; %s", url, kept)
+	case attemptRefused:
+		force := ""
+		if have != nil && out.Reason != errNoModels.Error() {
+			force = " gobble models refresh --force saves it."
+		}
+		return "", failf("model data: the document from %s was not saved: %s; %s%s", url, out.Reason, kept, force)
+	case attemptNotSaved:
+		return "", failf("model data: fetched from %s but not saved: %s.", url, out.Reason)
+	}
+	got := out.Data
+	n, sections := 0, got.Sections()
+	for _, k := range sections {
+		n += k
+	}
+	line := fmt.Sprintf("Model data: fetched from %s at %s UTC: %s in %s", sourceName(url),
+		modelDataTime(got.Stamp().Fetched), plural(int64(n), "model"), plural(int64(len(sections)), "section"))
+	switch {
+	case out.Result == attemptNotModified:
+		return line + "; not modified since " + modelDataTime(have.Stamp().Fetched) + ".\n", nil
+	case have == nil:
+		return line + "; there was no copy.\n", nil
+	case bytes.Equal(have.Document(), got.Document()):
+		return line + "; unchanged since the copy fetched " + modelDataTime(have.Stamp().Fetched) + ".\n", nil
+	}
+	return line + "; it replaces the copy fetched " + modelDataTime(have.Stamp().Fetched) + ".\n", nil
+}
+
+// failureWords is a failed fetch's reason as gobble models refresh says it:
+// its kind, and a status's code.
+func failureWords(out modelDataOutcome) string {
+	if ae, ok := errors.AsType[*llm.APIError](out.Err); ok && ae != nil {
+		return fmt.Sprintf("status %d", ae.Status)
+	}
+	return out.Reason
 }
 
 // printModels prints Pi's --list-models table (cli/list-models.ts) for the

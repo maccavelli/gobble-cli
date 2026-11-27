@@ -88,8 +88,8 @@ func newLimitHarnessWith(t *testing.T, settings SessionSettings, info map[string
 		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1", "m2"}},
 		{ID: "other", Label: "Other", State: StateLive, Models: []string{"x9"}}}}
 	opts := Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider: func(string, llm.Retry) (llm.Provider, error) { return h.fake, nil },
-		ProviderFor: func(id, _ string, _ llm.Retry) (llm.Provider, error) {
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return h.fake, nil },
+		ProviderFor: func(_ *provider.ModelData, id, _ string, _ llm.Retry) (llm.Provider, error) {
 			if id == "other" {
 				return h.other, nil
 			}
@@ -113,7 +113,7 @@ func newLimitHarnessWith(t *testing.T, settings SessionSettings, info map[string
 	return h
 }
 
-func (h *limitHarness) modelInfo(provider, model string) llm.Model {
+func (h *limitHarness) modelInfo(_ *provider.ModelData, provider, model string) llm.Model {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m := h.info[provider+"/"+model]
@@ -297,7 +297,7 @@ func TestTurnCapSameAtEveryLevel_0071(t *testing.T) {
 	m := llm.Model{ContextWindow: 200000, MaxTokens: 32000, Reasoning: true, ReasoningKnown: true,
 		Efforts: []string{"none", "low", "medium", "high", "xhigh", "max"}}
 	h := newLimitHarness(t, SessionSettings{}, map[string]llm.Model{"fake/m1": m})
-	levels := h.ag.levelsOf("fake", "m1")
+	levels := h.ag.levelsOf(nil, "fake", "m1")
 	if !slices.Contains(levels, "off") || !slices.Contains(levels, "max") {
 		t.Fatalf("levels %v, want off to max", levels)
 	}
@@ -729,7 +729,9 @@ func TestEveryCallNamesLimit_0071(t *testing.T) {
 	t.Run("title", func(t *testing.T) {
 		small := llmtest.NewScript(llmtest.Text("A title"))
 		h := newTitleHarness(t, t.TempDir(), llmtest.NewScript(llmtest.Text("ok")), small, func(o *Options) {
-			o.ModelInfo = func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }
+			o.ModelInfo = func(_ *provider.ModelData, provider, model string) llm.Model {
+				return llm.Model{Provider: provider, ID: model}
+			}
 		})
 		id := newSession(t, h.c, t.TempDir(), nil).SessionId
 		if _, err := prompt(t, h.c, id, "Name this session"); err != nil {
@@ -837,9 +839,11 @@ func TestEveryCallNamesLimitColdClaude_0071(t *testing.T) {
 	choice := ModelChoice{Provider: "fake", Models: []string{"m1"}, Default: "m1", Providers: []ProviderChoice{
 		{ID: "fake", Label: "Fake", State: StateLive, Models: []string{"m1"}}}}
 	ag := New(Options{Version: "1.2.3", Store: jsonl.New(t.TempDir(), jsonl.Options{}),
-		Provider:  func(string, llm.Retry) (llm.Provider, error) { return p, nil },
-		Models:    func() ModelChoice { return choice },
-		ModelInfo: func(provider, model string) llm.Model { return llm.Model{Provider: provider, ID: model} }})
+		Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return p, nil },
+		Models:   func() ModelChoice { return choice },
+		ModelInfo: func(_ *provider.ModelData, provider, model string) llm.Model {
+			return llm.Model{Provider: provider, ID: model}
+		}})
 	c := acptest.Connect(t, ag, client)
 	ag.SetConnection(c.Agent)
 	t.Cleanup(func() {

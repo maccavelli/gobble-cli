@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -79,9 +80,15 @@ func runBinary(t *testing.T, cwd string, env []string, args ...string) (stdout, 
 	return out.String(), errw.String()
 }
 
+// closedProxies name a port nothing listens on, for every proxy variable,
+// so a request that escapes fails on this machine (0072-MADR D10, M64).
+var closedProxies = []string{"HTTPS_PROXY=http://127.0.0.1:9", "https_proxy=http://127.0.0.1:9",
+	"HTTP_PROXY=http://127.0.0.1:9", "http_proxy=http://127.0.0.1:9"}
+
 // The built binary in completion mode, with an explicit environment: U+001F
 // words, a multibyte path, and C6: an empty home stays empty, nothing goes
-// to stderr.
+// to stderr; every proxy variable a closed port, so no model data is
+// fetched or written (0072-MADR M29, M64).
 func TestBinaryCompletionMode(t *testing.T) {
 	home, cwd := t.TempDir(), t.TempDir()
 	if err := os.WriteFile(filepath.Join(cwd, "dés.txt"), nil, 0o600); err != nil {
@@ -105,7 +112,7 @@ func TestBinaryCompletionMode(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, errText := runBinary(t, cwd, isolatedEnv(home, tc.env...), tc.args...)
+			out, errText := runBinary(t, cwd, isolatedEnv(home, append(slices.Clone(tc.env), closedProxies...)...), tc.args...)
 			if out != tc.want {
 				t.Fatalf("stdout = %q, want %q", out, tc.want)
 			}

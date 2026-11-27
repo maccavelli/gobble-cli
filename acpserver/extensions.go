@@ -512,7 +512,7 @@ func (a *Agent) statsOf(s *liveSession, entries []session.Entry) acpext.SessionS
 		Tokens: acpext.TokenStats{Input: t.input, Output: t.output, CacheRead: t.cacheRead, CacheWrite: t.cacheWrite,
 			Total: t.input + t.output + t.cacheRead + t.cacheWrite}, Cost: t.cost}
 	model, _ := a.choices(s)
-	if window := a.modelOf(a.provOf(s), model).ContextWindow; window > 0 {
+	if window := a.modelOf(s, a.provOf(s), model).ContextWindow; window > 0 {
 		used := a.usedOf(s)
 		st.ContextUsage = &acpext.ContextUsage{Tokens: used, ContextWindow: window, Percent: percentOf(used, window)}
 	}

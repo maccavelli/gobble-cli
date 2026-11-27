@@ -43,6 +43,7 @@ func (a *Agent) discoverModels(ctx context.Context, s *liveSession, provider, mo
 	if a.discover == nil {
 		return
 	}
+	data := a.dataOf(s) // the session's document, which its discoveries read (0072-MADR D17)
 	refs := [][2]string{{provider, model}}
 	if withTitle && a.titles.Provider != nil && a.titles.Model != "" && !slices.Contains(refs, [2]string{a.titles.ProviderID, a.titles.Model}) {
 		refs = append(refs, [2]string{a.titles.ProviderID, a.titles.Model})
@@ -71,7 +72,7 @@ func (a *Agent) discoverModels(ctx context.Context, s *liveSession, provider, mo
 		}()
 		s.disc.running.Go(func() {
 			defer close(hookDone)
-			if err := a.discover(dctx, ref[0], ref[1]); err != nil {
+			if err := a.discover(dctx, data, ref[0], ref[1]); err != nil {
 				a.logger.DebugContext(dctx, "model limits discovery", slog.String("session", string(s.id)),
 					slog.String("provider", ref[0]), slog.String("model", ref[1]), slog.Any("error", err))
 			}

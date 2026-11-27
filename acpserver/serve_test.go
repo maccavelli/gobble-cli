@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maccavelli/gobble-cli/llm"
+	"github.com/maccavelli/gobble-cli/llm/provider"
 )
 
 // errBroken is a read failure, as a broken stdin gives one.
@@ -74,7 +75,7 @@ func TestServeShutdownCancelsPrompt(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- Serve(ctx, inR, outW, ServeOptions{Agent: Options{Version: "1.2.3", NewID: counterIDs(),
-			Provider: func(string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }}})
+			Provider: func(*provider.ModelData, string, llm.Retry) (llm.Provider, error) { return model, nil }, Models: func() ModelChoice { return testModels }}})
 		outW.Close() //nolint:errcheck,gosec // test pipe
 	}()
 	send := func(id int, method, params string) {

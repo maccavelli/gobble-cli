@@ -28,6 +28,7 @@ type Settings struct {
 	Tools                Tools       `yaml:"tools" json:"tools,omitzero"`
 	MCP                  MCP         `yaml:"mcp" json:"mcp,omitzero"`
 	Images               Images      `yaml:"images" json:"images,omitzero"`
+	ModelData            ModelData   `yaml:"modelData" json:"modelData,omitzero"`
 	ExternalEditor       string      `yaml:"externalEditor" json:"externalEditor,omitempty"`
 }
 
@@ -36,6 +37,17 @@ type Images struct {
 	// AutoResize fits an image to 2000×2000 and 4.5 MB of base64. Off sends
 	// it unchanged within that size.
 	AutoResize bool `yaml:"autoResize" json:"autoResize,omitempty"`
+}
+
+// ModelData is when gobble's copy of models.dev's document is downloaded
+// again, and when its age is warned of (0072-MADR D11): global only, read at
+// process start; 0 turns each off.
+type ModelData struct {
+	// RefreshHours is the copy's age, in hours, at which a model call or a
+	// models command downloads it again, in the background.
+	RefreshHours int64 `yaml:"refreshHours" json:"refreshHours,omitempty"`
+	// WarnDays is the copy's age, in days, past which a run warns once.
+	WarnDays int64 `yaml:"warnDays" json:"warnDays,omitempty"`
 }
 
 // Permissions is the permission settings (0005-PLAN F6-2).
@@ -184,6 +196,10 @@ func (s *Settings) field(path string) any {
 		return &s.ExternalEditor
 	case "images.autoResize":
 		return &s.Images.AutoResize
+	case "modelData.refreshHours":
+		return &s.ModelData.RefreshHours
+	case "modelData.warnDays":
+		return &s.ModelData.WarnDays
 	}
 	return nil
 }
