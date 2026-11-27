@@ -26,6 +26,9 @@ for that session, rebuilds a session that began with none once when the first do
 *(2026-11-26, deviation: Phase 2's review closed in Phase 2, pass 2, and Q-F answered, "Builders take the document
 (Recommended)"; Phase 2b built. See "Deviation (2026-11-26)" under the execution record.)*
 
+*(2026-11-26, deviation: Q-G answered, "Remove it (Recommended)" (M88): no `ModelDataErr`; Phase 3 built. See "Deviation
+(2026-11-26): Q-G answered" under the execution record.)*
+
 *(2026-11-25, deviation, the owner's "gobble: v1.33.0 pin first, then 0072 (Recommended)": gobble pins go-llmprovider-sdk
 `v1.33.0` in 0071-PLAN's Phase 2 before this PLAN starts, so every phase here runs on `v1.33.0`; M22's step is struck; Phase 4
 is built as Phase 2b, between Phases 2 and 3, and is no longer the pin. See "Deviation (2026-11-25): pin first" under the
@@ -241,7 +244,8 @@ to the listings or the lookups (0071 Q5), the current copy has replaced it since
 
 Build: move the 2026-10-14 document to `llm/provider/testdata/models-dev-2026-10-14.json` and install it in each listed
 `TestMain`; remove `llm/catalog/data/`, `Snapshot`, `Source`, their tests and `scripts/gen_catalog.py`; remove the fallback
-from `llm/provider`; rename `SnapshotErr` to `ModelDataErr`; move the licence text to
+from `llm/provider`; ~~rename `SnapshotErr` to `ModelDataErr`~~ *(2026-11-26, "Remove it (Recommended)": remove
+`SnapshotErr` and its warning, M88)*; move the licence text to
 `llm/provider/testdata/LICENSE.models.dev` and re-word `NOTICE:22-28` (D15). Record the build's size before and after on each
 host.
 
@@ -1311,3 +1315,242 @@ Built in the tree (unstaged); scripts `rec2b2.py`, `fix2b2.py`, `disc_lits.py`, 
 The `refusable` case was added after the Linux and Windows runs; it ran in the module run and the plants on this Mac.
 Exit of Phase 2b (pass 2): every note S1 to S5 closed, each fix's test red by its plant; 6 plants caught; gates recorded; docs
 rows returned. Passes: Phase 2, two; Phase 2b, two built. Phase 3 is not started.
+
+### Phase 3 execution entry (2026-11-26)
+
+The owner approved this PLAN with the MADR, relayed by the coordinator, quoted exactly: **"Accept; approve; queue after 0070
+(Recommended)"**. This pass builds Phase 3, the removal of the built-in copy, as the deviations above leave it, from the base
+`101c6bb` (Phases 2 and 2b committed and pushed; go-llmprovider-sdk `v1.33.0` at `go.mod:16`); the tree was clean there (`git
+status --porcelain` empty, `main` level with `origin/main`). The owner's rulings that bear on it, each already a row, quoted
+exactly: **"Keep 'none', ship 2 and 3 together"** (M83: no release between Phases 2 and 3, and "Model data: none" is the
+display with no copy), **"Builders take the document (Recommended)"** (M86), **"Hooks take the session's document
+(Recommended)"** (M80), **"Unfinished attempts gate only briefly (Recommended)"** (M87) and **"A cancel doesn't gate or warn
+(Recommended)"** (M84). The agent stages nothing and commits nothing. Scratch: `<scratch>/b0072p3/`.
+
+### Phase 3, pass 1 (2026-11-26, from `101c6bb`): re-grounded; stopped before the build
+
+No source or test file changed.
+
+* **Re-ground at `101c6bb`.** Phase 3's rows (M19's last case, M33, M47 to M49) and D14, D15 hold; no fact F1 to F12 changed.
+  Moved since Phase 0: `scripts/gen_catalog.py` by Phase 2's docstring (`:7-10`; the URL `:33`, the fetch `:38-42`, the
+  write `:61-80`); `SnapshotErr` is `llm/provider/model.go:34-40`, logged at `internal/cli/agent.go:119-121` (was `:117`);
+  the holder's built-in fallback is `llm/provider/modeldata.go:145-155` (`builtIn`) and `:157-167` (`CurrentModelData`).
+  Unmoved: `llm/catalog/catalog.go:13-23`, `llm/catalog/data/source.json:1-16` (782 models in nine sections), `models.json`
+  (515,680 bytes), `NOTICE:22-28`, `llm/catalog/doc.go:4-8`, `docs/architecture.md:114`, `:268`, `:282`.
+* **Phase 0 step 4 again, by experiment.** On a scratch copy, `CurrentModelData` without the built-in fallback
+  (`probe_nofallback.py`); the module's tests through `run-heavy` (`logs/p0-probe-nofallback.log`, exit 1), then
+  `internal/cli` alone without the test that panicked (`logs/p0-probe-cli2.log`, exit 1). The tests that read the built-in
+  copy at `101c6bb` are fewer than Phase 0's file list: `internal/cli`'s `TestModelDataRoundTrip_0072` (a nil-pointer panic
+  in `Stamped`, which ended that binary's run), `TestModelDataEngineNeverBlocks_0072` (`modeldata_test.go:635: no current
+  document while the fetch blocks`) and `TestRefusalNoStatedCap_0071` (`observation_test.go:386: … the context is over the
+  model's window`); `llm/provider`'s `TestModelsJSONDefaultIsAssumed_0071` (`model_test.go:110: gpt-4o (models.json true):
+  cap 0 from "", want 16384 from "catalog"`) and `TestModelDataCurrent_0072/built_in` (`modeldata_test.go:363: current 0x0`,
+  the case M19's last replaces); and `TestSnapshotParses` and `llm/catalog`'s `TestSnapshot`, which read `Snapshot()` itself
+  and go with it (D14). `acpserver` passed with no built-in copy. M48's install is needed in `internal/cli` and
+  `llm/provider`, and is put in `acpserver` too, which Phase 0 step 4 listed. Nine cleanups reset the current document with
+  `SetCurrentModelData(nil)`, which meant "the built-in copy" (`internal/cli/modeldata_test.go:124`, `:750`,
+  `modeldatabase_test.go:42`, `modeldatarun_test.go:769`, `:985`; `llm/provider/discover_test.go:220`, `handin_test.go:57`,
+  `modeldata_test.go:353`, `modeldatalayer_test.go:24`): under M48 each restores the document it found, no assertion changing.
+* **The binary's size at `101c6bb`** (`sizes.py`: `go build ./cmd/gobble`, CGO off, the Makefile's two stamps fixed, through
+  `run-on-host`, no fallback; `logs/size-before-*.log`): this Mac 34,288,306 bytes; the Linux machine 36,052,311; the Windows
+  laptop 36,678,144.
+* **Docs Phase 3 changes, found** (`phrases.py` over `README.md`, `docs/README.md`, `docs/architecture.md`, `docs/guides/`,
+  `NOTICE`, `llm/catalog/doc.go`, the settings template, `AGENTS.md`; and `git grep` over the code): `NOTICE:22-28`;
+  `llm/catalog/doc.go:4-8`; `docs/architecture.md:113` ("else the built-in one"), `:114`, `:135` ("A model listing ranks by
+  gobble's built-in models.dev copy … until a refreshed copy is kept", stale since Phase 1), `:268`, `:282`;
+  `docs/guides/choosing-a-model.md:232` ("Until gobble has a copy it reads the one built into it"); `docs/guides/models-json.md:11`
+  ("With no file, gobble uses what it ships with"); the comments at `internal/cli/modeldatarun.go:326`, `:395`, `:442`,
+  `internal/cli/testmain_test.go:55`, `llm/provider/modeldata.go:33`, `:145-171`, `llm/provider/model.go:34-44` and in the
+  tests named above. `docs/README.md:186` is a run's history and stays; `docs/guides/credentials.md:422`, `:487` quote the
+  SDK's wizard (`wizard/configure.go:1204` at `v1.33.0`), whose "built-in catalog" is its own, and stay.
+
+One case is not decided (the MADR's tenth addition), so the phase stops before its build, as Phase 2b's pass 1 did; Phase 3
+is one phase and is not started in part.
+
+* **Q-G. What `ModelDataErr` reports once the built-in copy is gone** (D14, D21; 0005-PLAN F4-2a deviation 1). D14 renames
+  `SnapshotErr` to `ModelDataErr`; no row says what it reports. `SnapshotErr` is the embedded document's parse error, logged
+  by `agentOptions` at warn as "model catalog" (`internal/cli/agent.go:119-121`). After Phase 3 `llm/provider` parses no
+  document of its own; an unreadable copy is D3's warning, and no data in use is D13's, never before a first attempt (M63).
+  1. *(Recommended)* No `ModelDataErr`: `SnapshotErr` and `agentOptions`' "model catalog" warning go with the built-in copy,
+     and D3 and D13 are the model data's only warnings. D14 and D21 get a dated note. Cost: a name D21 lists is not built;
+     0005-PLAN F4-2a deviation 1's log has no successor, its cases being D3's and D13's.
+  2. `ModelDataErr` reports "no model data: models are unknown" while no document is current, and `agentOptions` logs it to
+     the log file alone (the log's file-only view), so stderr keeps D13's rule. Cost: a second, file-only record of D13's case
+     on every agent start with no data, a new behaviour with its own test and plant; the name means what `SnapshotErr` never
+     did.
+  3. `ModelDataErr` as the plain rename: `SnapshotErr`'s body without the built-in parse. Nothing in `llm/provider` can then
+     fail to read model data, so it always returns nil, and the log stays. Cost: an exported function and a warning that can
+     never fire, dead code a review would flag.
+  * Doing nothing: Phase 3 cannot remove `builtIn`, which `SnapshotErr` reads, within D14 and D21 as written. Reporting "no
+    data" through today's log instead would put a warning on stderr before a first attempt and turn M63's `none_untried` red.
+
+Pass count: Phase 3, one pass, stopped before the build. Gates: the records' alone (no source or test file changed); exit
+codes taken before any filter (`<scratch>/b0072p3/localgates.py`; logs `<scratch>/b0072p3/logs/gate-p3stop-*.log`).
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make check-records` | this Mac | 0 |
+| `make markdownlint` | this Mac | 0, 0 issues (59 files linted) |
+| `denyscan.py --root <gobble> --changed` | this Mac | 0, 0 hits in 2 files |
+| `github-disclosure.py redact` (dry run) | this Mac | 0, would edit 0 files |
+
+### Deviation (2026-11-26): Q-G answered, Phase 3 pass 1 continuing
+
+The coordinator relayed the owner's answer to Q-G, quoted exactly: **"Remove it (Recommended)"** (the MADR's tenth addition,
+M88; D14 and D21 annotated). `SnapshotErr` (`llm/provider/model.go:34-40`) and its warning in `agentOptions`
+(`internal/cli/agent.go:119-121`) are removed with the built-in copy; `ModelDataErr` is not built; D3 and D13 are the model
+data's only warnings. Phase 3's build step "rename `SnapshotErr` to `ModelDataErr`" is struck by it.
+
+| Phase | Rows | Test | Red at the phase's base because | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| 3 | M88 | `TestNoModelCatalogWarning_0072` (`internal/cli`); M63's `TestModelDataWarning_0072/none_untried` | a guard: at `101c6bb` the built-in copy parses, so `SnapshotErr` is nil and nothing is logged | `agentOptions` logging "model catalog" while no document is current |
+
+* **Files added to Phase 3's scope:** none beyond the rows' own (`internal/cli/agent.go` was already the log's site).
+
+### Phase 3, pass 1 continued (2026-11-26, from `101c6bb`): built
+
+Built in the tree (unstaged), each edit a recorded script in `<scratch>/b0072p3/` through `subst.py`, which asserts each
+anchor once (`t01_cleanups.py`, `t02_tests.py`, `t03_imports.py`, `p01_prod.py`, `rm_files.py`, `d01_docs.py`,
+`d02_reflow.py`); four one-line follow-ups (two imports the removed tests left, `log/slog` in `agent.go`, `FieldsSeq`'s
+one variable) and `gofmt -w` of the two `TestMain` files are noted in those scripts and below.
+
+* **Removed (D14, M47; "Remove it (Recommended)", M88).** `llm/catalog/data/` (`models.json`, `source.json`,
+  `LICENSE.models.dev`); `catalog.Snapshot`, `catalog.Source` and the embeds (`llm/catalog/catalog.go`); `scripts/gen_catalog.py`;
+  `llm/provider`'s `builtIn` and the fallback in `CurrentModelData`, which is now `current.Load()`, nil when none is set;
+  `SnapshotErr` (`llm/provider/model.go`) and its warning in `agentOptions` (`internal/cli/agent.go`). No `ModelDataErr`.
+* **Moved (D14, D15).** The 2026-10-14 document to `llm/provider/testdata/models-dev-2026-10-14.json` and its licence to
+  `llm/provider/testdata/LICENSE.models.dev`, each checked byte-identical before the old file was removed (`rm_files.py`).
+  `NOTICE:22-30` says gobble downloads model data at run time and embeds none, and credits the test data's copy.
+* **The install (M48).** `installTestModelData` in `acpserver`, `internal/cli` and `llm/provider` (`modeldatatestdata_test.go`
+  each) parses the test data with `provider.ParseModelData` and makes it current with the zero stamp the built-in copy had, so
+  every test reads the facts it read before; each `TestMain` calls it before `m.Run()` (in `internal/cli` and `llm/provider`,
+  in the child that runs the tests) and exits 2 if it fails. The file is found from the source file's own path
+  (`runtime.Caller`), since a pty case runs this binary again in a temporary directory. `acpserver` needs no fact of it (Phase
+  0's probe) and gets it as Phase 0 step 4 listed it. No D21 name is added.
+* **Existing tests changed, each by its row; no assertion of another row changed.** The nine cleanups that reset the current
+  document to nil restore the one they found (`keepModelData`, M48): `internal/cli/modeldata_test.go` (`newDataRun`,
+  `TestModelDataCurrent_0072/listing`), `modeldatabase_test.go` (`withCopy`), `modeldatarun_test.go` (`refreshCmdEnv`,
+  `TestAgentHooksReadSessionData_0072`), `llm/provider/discover_test.go`, `handin_test.go`, `modeldatalayer_test.go` and
+  `modeldata_test.go`'s `TestModelDataCurrent_0072`. That test's `built_in` case is `none` (M19's last case). Retired with
+  `Snapshot` (D14): `llm/provider`'s `TestSnapshotParses` and `llm/catalog`'s `TestSnapshot`; what they held (the document
+  parses, nine sections, `source.json`'s counts) is M48's test now.
+* **Rows to tests.** Reds at `101c6bb` by `reds.py`: a fresh copy of the base with only the changed and new test files and
+  `llm/provider/testdata/` copied in, no production change (`logs/red-*.log`); each touched package also run whole there,
+  where only these rows' tests failed (`red-whole-*.log`), so the install changed no other test. Greens: the five packages
+  through `run-heavy` (`logs/green1.log`, exit 0) and the gates below.
+
+| Rows | Test | Package | Red at `101c6bb` |
+| :--- | :--- | :--- | :--- |
+| M19 (last case) | `TestModelDataCurrent_0072/none` | `llm/provider` | `modeldata_test.go:360: current 0x…, sections map[anthropic:17 google:40 …], with none set; want none: gobble has no built-in copy` |
+| M33 | `TestNeverOnlineFirstRun_0072` (`facts`, `models_list`) | `internal/cli` | `modeldatanone_test.go:38: claude-opus-4-6: window 1000000, cap 128000, priced true; want each unknown`; `:41: thinking levels [low medium high max]`; `:44`; `:66: row ["claude" "claude-fable-5" "1M" "128K" "yes" "yes"]; want every fact unknown, "-"` |
+| M33 | `TestNeverOnlineFirstRun_0072` | `acpserver` | `modeldatanone_test.go:38: the turn asked for 64000; want the assumed 16384`; `:41: /context "…"; want the window unknown` |
+| M47 | `TestNoEmbeddedModelData_0072` | `llm/catalog` | `embed_test.go:30: llm/catalog embeds ["data/models.json" "data/source.json"] …; want no file` |
+| M48 | `TestModelDataTestdataInstalled_0072` | `acpserver`, `internal/cli`, `llm/provider` | new name: its plants |
+| M49 | `TestNoticeNamesExistingFiles_0072` | `internal/archtest` | a guard, green at the base: its plant |
+| M88 | `TestNoModelCatalogWarning_0072`; M63's `TestModelDataWarning_0072/none_untried` | `internal/cli` | a guard, green at the base: its plant |
+
+* **Plants** (`plants3.py`, 8 and the control, each one change on a scratch copy of the final tree, `plantwork`, every 0072
+  row test of the plant's packages selected; `plants3_own.py`; `logs/plants3-final.out`, `logs/plants-final/`): every one
+  caught, the control not.
+
+| Plant | Row | Caught by | Failing line |
+| :--- | :--- | :--- | :--- |
+| M33 the built-in copy kept as the fallback (embedded in `llm/provider`) | M33, M19 | both `TestNeverOnlineFirstRun_0072`, `TestModelDataCurrent_0072/none` | `modeldatanone_test.go:38: claude-opus-4-6: window 1000000, cap 128000, priced true; want each unknown`; `acpserver`'s `:38: the turn asked for 64000; want the assumed 16384` |
+| M47 `data/models.json` restored, embedded | M47 | `TestNoEmbeddedModelData_0072` | `embed_test.go:30: llm/catalog embeds ["data/models.json"] (patterns ["data/models.json"]); want no file` |
+| M48a `acpserver`'s `TestMain` without the install | M48 | `TestModelDataTestdataInstalled_0072` | `modeldatatestdata_test.go:49: no current document: TestMain did not install the test data` |
+| M48b `internal/cli`'s, likewise | M48 | `TestModelDataRoundTrip_0072/validators` (a nil-pointer panic, which ends the binary first); with its own test alone selected, `TestModelDataTestdataInstalled_0072` | `modeldatatestdata_test.go:56: no current document: TestMain did not install the test data` |
+| M48c `llm/provider`'s, likewise | M48 | `TestModelDataTestdataInstalled_0072` | `modeldatatestdata_test.go:54: no current document: TestMain did not install the test data` |
+| M49 `NOTICE` still naming `llm/catalog/data/LICENSE.models.dev` | M49 | `TestNoticeNamesExistingFiles_0072` | `notice_test.go:42: NOTICE names llm/catalog/data/LICENSE.models.dev: stat …: no such file or directory` |
+| M88 `agentOptions` logging "model catalog" with no document | M88 | `TestNoModelCatalogWarning_0072` | `modeldatanone_test.go:93: stderr "time=… level=WARN msg=\"model catalog\" error=\"no model data\"\n", log …` |
+
+* **Deviation (2026-11-26), a test tightened before its green:** `TestNeverOnlineFirstRun_0072/models_list` first read the
+  no-credential note after the table as rows (`row ["claude" "has" "no" "credential:" …]`, the first Linux run,
+  `logs/green1-linux.log`); it now stops at the table's end. Its red at the base was taken again with the fix
+  (`logs/red-m33-cli2.log`, the same failing lines). No assertion of another row changed.
+* **Lint.** The first `make pre-add-check` (on the Linux machine, while this Mac's queue held another repository's gate;
+  `logs/preadd-linux1.log`) found `gofmt` (two `TestMain` files, the install's comment alignment) and `modernize`
+  stringsseq (`internal/archtest/notice_test.go:14`); fixed without a suppression; then exit 0 there and through `run-heavy` on
+  this Mac.
+* **The binary's size** (`sizes.py`, as before; `logs/size-after-*.log`): this Mac 34,288,306 to 33,758,802 (529,504 smaller); the Linux machine
+  36,052,311 to 35,527,232 (525,079 smaller); the Windows laptop 36,678,144 to 36,159,488 (518,656 smaller). M47's "515,680
+  bytes smaller" is the document alone; the build also loses `source.json`, `Snapshot`, `Source` and `builtIn`, and the
+  linker's section alignment moves the total (the MADR's note on M47).
+* **No test touched the host's cache:** `~/.cache/gobble/model-data` was absent after the last module run.
+* **Docs.** `NOTICE:22-30`; `llm/catalog/doc.go:4-9`; `docs/architecture.md:113` (`CurrentModelData`, else none), `:114`
+  (`llm/catalog` holds no data), `:135` (the listing reads the current document), `:268` (NOTICE's credits), `:282` (no
+  generator); `docs/guides/choosing-a-model.md:232-235` (no data: what is unknown, `-`, `none`); `docs/guides/models-json.md:11-13`;
+  the comments of `CurrentModelData`, `SetCurrentModelData`, `ModelDataStamp`, `ModelInfo`, `KnownModels`,
+  `modelDataWarning`, `modelDataLine`, `currentCopy`, and of the tests that named the built-in copy or the snapshot
+  (`internal/cli/testmain_test.go:55`, `limit_test.go:265`, `:282`, `modeldata_test.go:104`, `modeldatabase_test.go:23`,
+  `llm/provider/discover_test.go:27`, `live_glm_cap_test.go:16`); the MADR's F1 — fixed. Stays: `docs/README.md:186` (a run's
+  history); `docs/guides/credentials.md:422`, `:487` (the SDK wizard's own words). Searched (`phrases.py`, `git grep`):
+  `README.md`, `docs/README.md`, `docs/architecture.md`, `docs/guides/`, `NOTICE`, `llm/catalog/doc.go`, the settings template,
+  `AGENTS.md`, and the code.
+* **Follow-ups, recorded, not built:** `TestModelDataRoundTrip_0072` panics (nil pointer) instead of failing when no
+  document is current, which ends its binary's run (M48b above); the SDK wizard's "search covers the built-in catalog only"
+  no longer describes gobble's data (an SDK string); and the earlier ones: `writePrivate`'s syncs (Phase 1),
+  `TestAuthenticateCancelAfterSaveTellsTheAgent`'s 5 s stop under `-race` (Phase 2), the guide's missing `limit` line (Phase 2),
+  `/session`'s "1 models", "1 providers" and "1 calls" (Phase 2b).
+
+#### Phase 3 gates (2026-11-26, the final tree)
+
+Exit codes taken before any filter (`<scratch>/b0072p3/preadd.py`, `preadd_host.py`, `gates.py`, `windows3.py`,
+`sizes.py`, `plants3.py`, `localgates.py`); logs `<scratch>/b0072p3/logs/`; no log has a fallback line; every heavy run
+through `run-heavy` or `run-on-host`.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `make pre-add-check FILES=…` (27 files), `run-on-host --need linux` | the Linux machine | 2 (gofmt 2, modernize 1), then 0 |
+| `make pre-add-check FILES=…` (27 files), `run-heavy` | this Mac | 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+| `make check-test-isolation`, `run-heavy` | this Mac | 0; 0 files written above the temp roots |
+| `make preflight`, `run-on-host --need darwin` | this Mac | 0, "preflight passed" |
+| `make preflight race`, `run-on-host --need linux --race` | the Linux machine (linux/amd64, not WSL) | 0, "preflight passed" |
+| `make preflight`, `run-on-host --need windows` | the Windows laptop (windows/amd64) | 0, "preflight passed" |
+| `go test -count=1` of `llm/catalog`, `llm/provider`, `internal/cli`, `acpserver`, `internal/archtest`, `cmd/gobble`, `run-on-host --need windows` | the Windows laptop | 0 |
+| `go test -tags conpty -run '^TestConptyGobble$' ./cmd/gobble/`, `run-on-host --need windows` | the Windows laptop | 0 (16 cases pass, `no-model-data` among them) |
+| every plant (`plants3.py`, `plants3_own.py`) | this Mac | 0; 8 caught and the control not; M48b's own test catches it |
+| the binary's size, `run-on-host` | this Mac, the Linux machine, the Windows laptop | 0, 0, 0 |
+| `make check-records`, `make markdownlint`, `denyscan.py --changed`, the redact dry run | this Mac | 0 each (markdownlint 0 issues; denyscan 0 hits) |
+
+Exit of Phase 3 (pass 1): every row of Phase 3 (M19's last case, M33, M47 to M49, M88) tested, red at the base or held by its
+plant; 8 plants caught and the control not; gates recorded; docs rows returned. Passes: Phase 3, one (its first part stopped
+at Q-G before the build). An independent review is the coordinator's.
+
+### Deviation (2026-11-27): Phase 3's review, pass 2
+
+The coordinator relayed the code review of Phase 3, **PASS WITH NOTES**. Each note is closed in **Phase 3, pass 2**, kept
+narrow; no row changes.
+
+| Item | Note | Fix or proof | Test | Plant |
+| :--- | :--- | :--- | :--- | :--- |
+| T1 (M88) | `TestNoModelCatalogWarning_0072`'s plant was caught on stderr; its log-file half was never shown to fail | a plant that writes "model catalog" to the log file alone | `TestNoModelCatalogWarning_0072` | M88b: the record through the log's file-only view |
+| T2 (M48) | `TestModelDataRoundTrip_0072` (`internal/cli/modeldata_test.go:217`, `:223`) panics with no current document, ending the binary (pass 1's M48b) | `t.Fatal` naming the cause when there is none | `TestModelDataRoundTrip_0072` | M48b again, the whole package selected |
+| T3 | `docs/README.md:162`: the PLAN's index status ends at "Phase 2b stopped before its build" | Phases 2, 2b and 3 built | docs | |
+
+### Phase 3, pass 2 (2026-11-27): the review's notes closed
+
+Scripts `plan_pass2.py`, `plants3_pass2.py`, `d03_readme.py` in `<scratch>/b0072p3/`; logs `logs/plants3-p2.out`,
+`logs/plants-p2/`.
+
+* **T1, proved; no fix needed.** Plant M88b writes the "model catalog" record through the log's file-only view
+  (`e.logs.fileOnly()`), nothing on stderr; `TestNoModelCatalogWarning_0072` catches it on its log-file half:
+  `modeldatanone_test.go:93: stderr "", log "{…\"level\":\"WARN\",\"msg\":\"model catalog\",\"error\":\"no model data\"}\n";
+  want no "model catalog" warning`.
+* **T2, fixed.** `TestModelDataRoundTrip_0072` fails with `t.Fatal` when no document is current. M48b again, every 0072 test of
+  `internal/cli` selected: no panic (0 `panic:` lines); caught by `TestModelDataRoundTrip_0072`
+  (`modeldata_test.go:219: no current document to write: TestMain did not install the test data (0072-MADR M48)`),
+  `TestModelDataEngineNeverBlocks_0072` and M48's own `TestModelDataTestdataInstalled_0072`
+  (`modeldatatestdata_test.go:56: no current document: TestMain did not install the test data`). Pass 1's follow-up on the
+  panic is closed.
+* **T3, fixed.** `docs/README.md:162`: Phases 2 and 2b built, committed at `101c6bb`; Phase 3 built, after Q-G.
+
+| Command | Where | Exit |
+| :--- | :--- | ---: |
+| `go test -run '^(TestModelDataRoundTrip_0072\|TestNoModelCatalogWarning_0072)$' ./internal/cli/` | this Mac | 0 |
+| plants M88b, M48b (`plants3_pass2.py`) | this Mac | 0; both caught, M48b without a panic |
+| `make pre-add-check FILES=…` (27 files), `run-heavy` | this Mac | 0 |
+| `go test -count=1 ./...`, `run-heavy` | this Mac | 0 |
+| `make check-records`, `make markdownlint`, `denyscan.py --changed`, the redact dry run | this Mac | 0 each |
+
+Exit of Phase 3 (pass 2): T1 to T3 closed; 2 plants caught; gates recorded. Passes: Phase 3, two.

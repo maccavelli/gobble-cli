@@ -21,7 +21,7 @@ func layerDoc(t *testing.T, w string) *ModelData {
 // reads, and that document is the session's, Options.ModelData, not the
 // current one (0072-MADR D16, D19).
 func TestModelsJSONAboveModelData_0072(t *testing.T) {
-	t.Cleanup(func() { SetCurrentModelData(nil) })
+	keepModelData(t)
 	session, current := layerDoc(t, "50000"), layerDoc(t, "70000")
 	SetCurrentModelData(current)
 	// The name is a fact the higher layer simply wins; a window is the

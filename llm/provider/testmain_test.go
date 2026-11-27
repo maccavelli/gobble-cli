@@ -45,6 +45,10 @@ func TestMain(m *testing.M) {
 			os.Exit(2)                                         //nolint:forbidigo // TestMain's exit
 		}
 	}
+	if err := installTestModelData(); err != nil { // 0072-MADR M48
+		fmt.Fprintf(os.Stderr, "model data: %v\n", err) //nolint:forbidigo // the test binary's own stderr
+		os.Exit(2)                                      //nolint:forbidigo // TestMain's exit
+	}
 	os.Exit(m.Run()) //nolint:forbidigo // TestMain's exit
 }
 

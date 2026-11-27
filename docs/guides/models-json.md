@@ -8,8 +8,9 @@ unchanged. What gobble does differently is listed under [What is not used](#what
 ## Where it lives
 
 It is `models.json` in gobble's config directory. `gobble config path` prints the directory on its
-`config:` line. With no file, gobble uses what it ships with. gobble reads the file once, when it
-starts, so restart gobble after you edit it.
+`config:` line. With no file, gobble uses its curated models and the model data it downloads
+([where the model facts come from](choosing-a-model.md#where-the-model-facts-come-from)). gobble
+reads the file once, when it starts, so restart gobble after you edit it.
 
 ## An example
 

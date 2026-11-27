@@ -322,8 +322,8 @@ func (e *runEnv) noneWarning(kind string) (string, bool) {
 // modelDataWarning is the warning a run gives at its start, or "": with a
 // copy past warnDays (and not ahead of this clock), its age, with the last
 // attempt's refusal and, for one --force passes, --force, or its failure's
-// kind, a cancelled attempt named neither way (M84); with none (before
-// 0072-PLAN's Phase 3, the built-in copy in use), D13's, when the run is
+// kind, a cancelled attempt named neither way (M84); with none, D13's,
+// when the run is
 // pinned or the last attempt failed, and none before a first attempt
 // (0072-MADR D12, D13, M39, M40, M63).
 func (e *runEnv) modelDataWarning(ctx context.Context, now time.Time) string {
@@ -392,8 +392,7 @@ func modelDataTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04
 // modelDataLine is the line for d, the document a session or a command
 // reads, at now: its source, when it was fetched and how long ago, with
 // D12's advice once it is warnDays old; ahead of this clock; or none
-// (before 0072-PLAN's Phase 3, the built-in copy in use) (0072-MADR D12,
-// M37).
+// (0072-MADR D12, M37).
 func modelDataLine(d *provider.ModelData, now time.Time, warnDays int64) string {
 	st := d.Stamp()
 	if st.Source == "" {
@@ -438,9 +437,9 @@ func (e *runEnv) currentModelDataLine() string {
 	return modelDataLine(provider.CurrentModelData(), modelDataNow(), e.modelDataSettings().WarnDays)
 }
 
-// currentCopy is the current document when it is a copy, nil while there is
-// none (before 0072-PLAN's Phase 3, the built-in copy, whose stamp is the
-// zero one): what a new ACP session takes (0072-MADR D19, M60, M61).
+// currentCopy is the current document when it is a copy (a stamped one),
+// nil while there is none: what a new ACP session takes (0072-MADR D19,
+// M60, M61).
 func currentCopy() *provider.ModelData {
 	if d := provider.CurrentModelData(); d.Stamp().Source != "" {
 		return d

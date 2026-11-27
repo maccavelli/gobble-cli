@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"io"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -116,9 +115,6 @@ func (e *runEnv) lookupOptions(id string) provider.Options {
 // the session store in the data directory.
 func (e *runEnv) agentOptions() acpserver.Options {
 	e.startModelListing()
-	if err := provider.SnapshotErr(); err != nil { // models are then unknown, never refused (0005-PLAN F4-2a deviation 1)
-		e.log().Warn("model catalog", slog.Any("error", err))
-	}
 	return acpserver.Options{
 		Version: identity().Version,
 		// Each model call first starts the automatic refresh of the model

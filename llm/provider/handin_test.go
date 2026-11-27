@@ -53,8 +53,8 @@ func metadataValues(t *testing.T, opts []llmprovider.Option) int {
 // this test: the built-in copy's layer is gone.)
 func TestLookupGetsSessionModelData_0072(t *testing.T) {
 	session, current := handDoc(t, "https://session.invalid/api.json", 24000), handDoc(t, "https://current.invalid/api.json", 30000)
+	keepModelData(t)
 	SetCurrentModelData(current)
-	t.Cleanup(func() { SetCurrentModelData(nil) })
 	if m := ModelInfoWith(Options{ModelData: session}, "claude", savedModel, nil); m.MaxTokens != 24000 || m.Name != "Saved One" {
 		t.Errorf("a lookup with the session's document: MaxTokens %d, name %q; want its 24,000", m.MaxTokens, m.Name)
 	}

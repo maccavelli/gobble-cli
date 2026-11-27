@@ -1,52 +1,12 @@
 package catalog
 
 import (
-	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"maps"
 	"math"
 	"slices"
 	"testing"
 
 	"github.com/maccavelli/gobble-cli/llm"
 )
-
-// sections are the nine models.dev sections go-llmprovider-sdk reads.
-var sections = []string{"anthropic", "google", "huggingface", "kilo", "openai", "opencode", "opencode-go", "togetherai", "xai"}
-
-// The snapshot holds the nine sections and no other, and source.json
-// describes it: its source, its time, and each section's model count.
-func TestSnapshot(t *testing.T) {
-	var doc map[string]struct {
-		Models map[string]jsontext.Value `json:"models"`
-	}
-	if err := json.Unmarshal(Snapshot(), &doc); err != nil {
-		t.Fatal(err)
-	}
-	if got := slices.Sorted(maps.Keys(doc)); !slices.Equal(got, sections) {
-		t.Fatalf("sections %q, want %q", got, sections)
-	}
-	var src struct {
-		Providers map[string]int `json:"providers"`
-		SHA256    string         `json:"sha256"`
-	}
-	if err := json.Unmarshal(source, &src); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range sections {
-		if n := len(doc[key].Models); n == 0 || src.Providers[key] != n {
-			t.Errorf("%s: %d models, source.json says %d", key, n, src.Providers[key])
-		}
-	}
-	if url, fetched := Source(); url == "" || fetched.IsZero() || len(src.SHA256) != 64 {
-		t.Errorf("source %q fetched %v sha256 %q", url, fetched, src.SHA256)
-	}
-	b := Snapshot()
-	b[0] = 'x'
-	if Snapshot()[0] == 'x' {
-		t.Error("Snapshot returned the embedded bytes, not a copy")
-	}
-}
 
 // Levels follows Pi's rule, and a model of unknown reasoning keeps the
 // levels gobble offered before the catalog.

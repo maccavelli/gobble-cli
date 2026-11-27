@@ -262,7 +262,7 @@ func TestCutCallAfterText_0071(t *testing.T) {
 	})
 }
 
-// builtInListing is a listing of two OpenAI models the built-in copy knows:
+// builtInListing is a listing of two OpenAI models the test data knows:
 // gpt-5-mini takes images, o3-mini text only (TestModelDataCurrent_0072's
 // copy states the reverse).
 type builtInListing struct{}
@@ -279,7 +279,7 @@ func (builtInListing) RoundTrip(r *http.Request) (*http.Response, error) {
 // slowDiscovery replaces the run's discovery with one that records each
 // model and, after 200 ms, lets the model facts state a 32,000 cap, as a
 // listing read would; before it ends the facts are the offline lookup's (the
-// built-in copy's cap, under the 64,000 ceiling). Both are restored when t
+// test data's cap, under the 64,000 ceiling). Both are restored when t
 // ends. A key in the
 // environment gives the session a model, as a run with a credential has;
 // nothing here reads it.

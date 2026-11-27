@@ -18,7 +18,6 @@ import (
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
-	gcatalog "github.com/maccavelli/gobble-cli/llm/catalog"
 )
 
 // modelDoc is a models.dev document with each section's models, each model
@@ -347,27 +346,24 @@ func (r repeatReader) Read(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// M19, M74 (the lookups' half): the current document is the copy, else the
-// built-in copy until Phase 3, never both.
+// M19, M74 (the lookups' half): the current document is the copy, else
+// none: no built-in copy since 0072-PLAN's Phase 3; never both.
 func TestModelDataCurrent_0072(t *testing.T) {
-	t.Cleanup(func() { SetCurrentModelData(nil) })
+	keepModelData(t)
 	const builtInOnly = "claude-opus-4-6"
 	if slices.Contains(Models("claude"), builtInOnly) {
 		t.Fatalf("%s is curated, so the test shows nothing", builtInOnly)
 	}
-	t.Run("built_in", func(t *testing.T) {
+	t.Run("none", func(t *testing.T) {
 		SetCurrentModelData(nil)
-		d := CurrentModelData()
-		built, err := builtIn()
-		if err != nil || d != built || d.Stamp() != (ModelDataStamp{}) {
-			t.Fatalf("current %p, built-in %p (%v), stamp %+v", d, built, err, d.Stamp())
+		if d := CurrentModelData(); d != nil {
+			t.Fatalf("current %p, sections %v, with none set; want none: gobble has no built-in copy (0072-MADR M19)", d, d.Sections())
 		}
-		_, fetched := gcatalog.Source()
-		if fetched.IsZero() || d.Sections()["anthropic"] != 17 {
-			t.Errorf("sections %v; want the built-in copy's", d.Sections())
+		if m := ModelInfoContext(t.Context(), "claude", "", builtInOnly, nil); m.Name != "" || m.ContextWindow != 0 {
+			t.Errorf("%s reads %q, window %d, with no document; want it unknown", builtInOnly, m.Name, m.ContextWindow)
 		}
-		if m := ModelInfoContext(t.Context(), "claude", "", builtInOnly, nil); m.Name == "" {
-			t.Errorf("%s unknown with the built-in copy current", builtInOnly)
+		if got := KnownModels("claude"); !slices.Equal(got, Models("claude")) {
+			t.Errorf("KnownModels %v with no document; want the curated models alone, %v", got, Models("claude"))
 		}
 	})
 	t.Run("copy", func(t *testing.T) {

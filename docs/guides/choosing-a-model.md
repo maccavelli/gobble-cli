@@ -229,7 +229,10 @@ lock stops two that start at the same moment, and a download cut short because g
 not hold the next one back. An unchanged document costs a reply
 with no body. A download with no models is never kept, nor, against a copy
 from the same place, one that lacks a section the copy has or holds under half its models.
-Until gobble has a copy it reads the one built into it, and the data line says `none`.
+gobble carries no model data of its own: until it has a copy, models are unknown (no window, so nothing
+compacts until the service refuses a prompt; an assumed output limit of 16,384; no prices; thinking levels
+off to xhigh; only the models gobble names itself), `gobble models list` shows `-` for each fact, and the
+data line says `none`.
 
 A session keeps the model data it started with, so a download during it changes none of its
 facts, nor what its requests read of them (the route an OpenCode model takes, a model's efforts); a

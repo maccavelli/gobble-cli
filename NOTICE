@@ -19,13 +19,15 @@ the Apache License, Version 2.0.
 This product uses github.com/maccavelli/go-llmprovider-sdk, licensed
 under the Apache License, Version 2.0.
 
-This product embeds model data from models.dev
-(https://github.com/anomalyco/models.dev), in llm/catalog/data/models.json,
-which is licensed under the MIT License:
+This product downloads model data from models.dev
+(https://github.com/anomalyco/models.dev) at run time and embeds none.
+Its test data holds a copy of models.dev's document, in
+llm/provider/testdata/models-dev-2026-10-14.json, which is licensed under
+the MIT License:
 
   Copyright (c) 2025 models.dev
 
-The licence's full text is in llm/catalog/data/LICENSE.models.dev.
+The licence's full text is in llm/provider/testdata/LICENSE.models.dev.
 
 This product copies prompt text from opencode
 (https://github.com/anomalyco/opencode), in compaction/prompts.go, and

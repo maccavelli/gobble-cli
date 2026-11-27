@@ -19,7 +19,6 @@ import (
 
 	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
-	gcatalog "github.com/maccavelli/gobble-cli/llm/catalog"
 )
 
 // ModelDataURL is models.dev's document, the one source of gobble's model
@@ -30,7 +29,7 @@ const ModelDataURL = "https://models.dev/api.json"
 // (not the one a redirect reached), the time of the reply, in UTC to the
 // second, and the reply's ETag and Last-Modified, which a later fetch from
 // the same URL sends back (0072-MADR D2, D4, M77). The zero stamp is a
-// document that was never fetched: the built-in copy.
+// document that was never fetched, and no current document has one.
 type ModelDataStamp struct {
 	Source       string
 	Fetched      time.Time
@@ -142,33 +141,16 @@ func (d *ModelData) options() []llmprovider.Option {
 // (0072-MADR D7).
 var current atomic.Pointer[ModelData]
 
-// builtIn is the embedded models.dev document, parsed once, with the zero
-// stamp. A document the SDK refuses leaves every model unknown, and
-// SnapshotErr reports it. It is the current document until one is set,
-// until 0072-PLAN's Phase 3 removes it (0072-MADR M19).
-var builtIn = sync.OnceValues(func() (*ModelData, error) {
-	d, err := ParseModelData(bytes.NewReader(gcatalog.Snapshot()))
-	if err != nil {
-		return nil, fmt.Errorf("provider: the embedded model catalog cannot be read, so models are unknown: %w", err)
-	}
-	return d, nil
-})
-
 // CurrentModelData is the process's current document: the one
-// SetCurrentModelData set last, else the built-in copy, else nil. Every
-// lookup reads it as its one models.dev layer, never two (0072-MADR D7,
-// M19). It takes no lock.
-func CurrentModelData() *ModelData {
-	if d := current.Load(); d != nil {
-		return d
-	}
-	d, _ := builtIn() //nolint:errcheck // SnapshotErr reports it
-	return d
-}
+// SetCurrentModelData set last, else nil, and with nil every model is
+// unknown: gobble carries no built-in copy (0072-MADR D7, D13, M19). Every
+// lookup reads it as its one models.dev document, never two. It takes no
+// lock.
+func CurrentModelData() *ModelData { return current.Load() }
 
 // SetCurrentModelData makes d the process's current document, for the
-// lookups, the listings and the sessions that start after it; nil returns
-// to the built-in copy (0072-MADR D7, D19).
+// lookups, the listings and the sessions that start after it; nil leaves
+// none (0072-MADR D7, D19).
 func SetCurrentModelData(d *ModelData) { current.Store(d) }
 
 // FetchModelData GETs url once with o's client (o.HTTPClient, else the SDK's

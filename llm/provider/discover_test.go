@@ -24,7 +24,7 @@ import (
 // The tests of 0071-PLAN's Phase 2b in llm/provider: discovery, and the
 // limits a lookup reads with their sources (0071-MADR P17, P28, P33;
 // 0066-MADR D1, D3, D4, D9 as amended 2026-11-25). Each serves its own
-// listing; none asserts a value the embedded snapshot states (0066-PLAN's
+// listing; none asserts a value the test data's document states (0066-PLAN's
 // rule).
 
 // limitWire is an Anthropic service in process: GET /v1/models answers
@@ -216,8 +216,8 @@ func turnCapSessionDocument(t *testing.T) {
 	// 0072-MADR M54: with the session's document handed in, the cap is
 	// its document's, not the current one's, and the turn carries it.
 	session, current := handDoc(t, "https://session.invalid/api.json", 24000), handDoc(t, "https://current.invalid/api.json", 30000)
+	keepModelData(t)
 	SetCurrentModelData(current)
-	t.Cleanup(func() { SetCurrentModelData(nil) })
 	w := &limitWire{listing: claudeListingOf(savedModel, 0, 200000)}
 	o := claudeOpts(t, w, "sk-session-document")
 	o.ModelData = session

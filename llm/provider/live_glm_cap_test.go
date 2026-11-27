@@ -13,7 +13,7 @@ import (
 
 // Whether each service accepts the output limit gobble sends a GLM-5.3
 // model, one short streamed prompt each, at the limit llm.FitOutput gives
-// for the snapshot's cap and window (0071-MADR L34, Q1 "Yes, short live
+// for the 2026-10-14 document's cap and window (0071-MADR L34, Q1 "Yes, short live
 // calls (Recommended)"). It is a measurement, not a red test: it logs only
 // the limit sent, "ok" for a stream that succeeded, the finish reason, the
 // token counts and a failure's kind and HTTP status, never a key, a reply or

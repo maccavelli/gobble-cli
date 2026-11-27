@@ -31,17 +31,9 @@ func SDKVersion() string {
 	return "(unknown)"
 }
 
-// SnapshotErr is why the embedded catalog could not be read, or nil. The
-// caller logs it: models are then unknown, never refused (0005-PLAN F4-2a
-// deviation 1).
-func SnapshotErr() error {
-	_, err := builtIn()
-	return err
-}
-
 // ModelInfo is what the catalog knows of model on provider id, from the
-// current document (CurrentModelData: the copy gobble keeps, else the
-// built-in one; 0072-MADR D7) and, with apiKey, the provider's listing as the SDK has
+// current document (CurrentModelData: the copy gobble keeps, else none;
+// 0072-MADR D7) and, with apiKey, the provider's listing as the SDK has
 // it cached. It waits for no listing: one not yet cached is fetched in the
 // background for a later call (0005-PLAN F4-2a). With a login, the SDK first
 // asks it for a token, which may refresh at the issuer before ModelInfo
@@ -275,7 +267,7 @@ func heldToServiceStated(f llm.LimitFact) llm.LimitFact {
 // keeps only those.
 func KnownModels(id string) []string {
 	d := CurrentModelData()
-	if d == nil { // the curated models alone; SnapshotErr reports it
+	if d == nil { // the curated models alone: no model data (0072-MADR D13)
 		return Models(id)
 	}
 	return toolModels(id, &d.doc.meta)

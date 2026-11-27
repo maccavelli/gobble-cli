@@ -101,7 +101,7 @@ func (d *dataTransport) requests() []*http.Request {
 
 // dataRun is a run whose engine fetches through an in-memory transport from
 // cliDataURL, and reads its copy from GOBBLE_HOME; the current document is
-// the built-in copy again when t ends.
+// the one t found again when t ends.
 type dataRun struct {
 	e             *runEnv
 	warnings      *syncBuffer
@@ -119,9 +119,9 @@ func newDataRun(t *testing.T, replies ...dataReply) *dataRun {
 		return provider.FetchModelData(ctx, url, o)
 	}
 	loadModelData, modelDataSource = readModelDataCopy, cliDataURL
+	keepModelData(t)
 	t.Cleanup(func() {
 		fetchModelData, loadModelData, modelDataSource = oldFetch, oldLoad, oldSource
-		provider.SetCurrentModelData(nil)
 	})
 	dirs, _, err := systemDirs()
 	if err != nil {
@@ -215,6 +215,9 @@ func TestModelDataPath_0072(t *testing.T) {
 func TestModelDataRoundTrip_0072(t *testing.T) {
 	dir := t.TempDir()
 	built := provider.CurrentModelData()
+	if built == nil {
+		t.Fatal("no current document to write: TestMain did not install the test data (0072-MADR M48)")
+	}
 	for name, s := range map[string]provider.ModelDataStamp{
 		"validators":    {Source: cliDataURL, Fetched: time.Date(2026, 11, 25, 1, 2, 3, 0, time.UTC), ETag: `W/"abc"`, LastModified: "Wed, 25 Nov 2026 01:00:00 GMT"},
 		"no_validators": {Source: cliDataURL, Fetched: time.Date(2026, 11, 25, 1, 2, 3, 0, time.UTC)},
@@ -747,7 +750,7 @@ func TestModelDataNotSaved_0072(t *testing.T) {
 // TestListingRanksByBuiltInCopy_0071 here).
 func TestModelDataCurrent_0072(t *testing.T) {
 	t.Run("listing", func(t *testing.T) {
-		t.Cleanup(func() { provider.SetCurrentModelData(nil) })
+		keepModelData(t)
 		// The copy states o3-mini takes images and gpt-5-mini does not.
 		doc := []byte(`{"openai":{"models":{"o3-mini":{"name":"o3 mini","modalities":{"input":["text","image"],"output":["text"]}},` +
 			`"gpt-5-mini":{"name":"GPT-5 mini","modalities":{"input":["text"],"output":["text"]}}}}}`)

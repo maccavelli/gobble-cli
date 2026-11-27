@@ -764,9 +764,9 @@ func refreshCmdEnv(t *testing.T, seed []byte, replies ...dataReply) (home string
 		return provider.FetchModelData(ctx, url, o)
 	}
 	loadModelData, modelDataSource = readModelDataCopy, cliDataURL
+	keepModelData(t)
 	t.Cleanup(func() {
 		fetchModelData, loadModelData, modelDataSource = oldFetch, oldLoad, oldSource
-		provider.SetCurrentModelData(nil)
 	})
 	dirs, _, err := systemDirs()
 	if err != nil {
@@ -982,7 +982,7 @@ func TestModelDataNotLoadedForLogFree_0072(t *testing.T) {
 // (0072-MADR D19; "Hooks take the session's document (Recommended)").
 func TestAgentHooksReadSessionData_0072(t *testing.T) {
 	e, _ := modelEnv(t)
-	t.Cleanup(func() { provider.SetCurrentModelData(nil) })
+	keepModelData(t)
 	doc := func(window string) *provider.ModelData {
 		return cliParsed(t, []byte(`{"openai":{"models":{"hooked":{"name":"Hooked","limit":{"context":`+window+`,"output":1000}}}}}`),
 			provider.ModelDataStamp{Source: cliDataURL, Fetched: time.Now()})

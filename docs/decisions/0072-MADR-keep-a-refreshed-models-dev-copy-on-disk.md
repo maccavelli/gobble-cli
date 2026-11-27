@@ -53,6 +53,9 @@ cancel doesn't gate or warn (Recommended)" and, on Q-F, "Builders take the docum
 *(2026-11-26, ninth addition at the end: Phase 2b's review; D21 gains `Options.Discover`'s document, under D17; M46's
 leftover window; D12's singular.)*
 
+*(2026-11-26, tenth addition at the end: Phase 3 re-grounded at 101c6bb; Q-G, what `ModelDataErr` reports once the
+built-in copy is gone, put to the owner; answered "Remove it (Recommended)", M88; D14 and D21 annotated.)*
+
 ## Context and Problem Statement
 
 Every fact gobble knows of a model without asking its provider (its name, window, output cap, input kinds, reasoning and
@@ -105,6 +108,9 @@ was re-read there and has not moved.)*
   models in nine sections (`llm/catalog/data/source.json:1-16`). `models.json` is 515,680 bytes; `LICENSE.models.dev` sits
   beside it; `NOTICE:22-28` credits it. `scripts/gen_catalog.py` makes both (`:31` the URL, `:36-40` the fetch, `:59-78` the
   write); its docstring says nothing in gobble fetches the document at run time (`:6-8`).
+  *(2026-11-26, Phase 3: the embedded copy, `source.json`, `Snapshot`, `Source` and `scripts/gen_catalog.py` are removed; the
+  2026-10-14 document and its licence are test data, `llm/provider/testdata/models-dev-2026-10-14.json` and
+  `LICENSE.models.dev`, and `NOTICE:22-30` credits them there (D14, D15).)*
 * **F2. Who reads it.** `llm/provider/model.go:18-26` parses it once (`sync.OnceValues`, `catalog.ParseMetadata`);
   `modelInfoFrom` hands it to the SDK as a layer (`:107-110`), models.json above it (`:115`), with the SDK's own fetch off
   (`:176`); `KnownModels` lists its tool models (`:142-151`); `SnapshotErr` (`:47-53`) is logged at
@@ -257,6 +263,8 @@ for one document a rename already writes atomically. D hard-codes data.
   document becomes test data (`llm/provider/testdata/models-dev-2026-10-14.json`), installed by each test binary that reads
   model facts, so no expected value changes. The build loses 515,680 bytes. *(2026-11-25: on `v1.33.0`, which gobble then
   pins; the built-in copy that 0071's pin hands the listings, or none (0071 Q5), is what Phase 3 removes.)*
+  *(2026-11-26, "Remove it (Recommended)" (Q-G, M88): `SnapshotErr` and `agentOptions`' "model catalog" warning are
+  removed with the built-in copy, and `ModelDataErr` is not built; D3 and D13 are the model data's only warnings.)*
 * **D15. The licence.** After Phase 3 the binary carries no models.dev data (and from `v1.33.0` neither does the SDK, F4).
   `NOTICE`'s paragraph then says gobble downloads model data from models.dev at run time, and that its test data holds a copy of
   models.dev's document under the MIT licence, whose text moves to `llm/provider/testdata/LICENSE.models.dev`, beside it.
@@ -313,7 +321,8 @@ for one document a rename already writes atomically. D hard-codes data.
   it up to 5 s, the write and `fsx`'s Windows retries (2 s each, F6) included, then cancel.
 * **D21. Exported names** (gobble is below `v1.0.0`): `llm/provider`: `FetchModelData`, `ModelData` (with `Stamp()` and
   `Sections()`), `ParseModelData`, `CurrentModelData`, `SetCurrentModelData`, `Options.ModelData` (the session's; nil is the
-  current), `ModelDataErr` (for `SnapshotErr`, Phase 3); `acpserver`: `Options.ModelData func() *provider.ModelData` and
+  current), ~~`ModelDataErr` (for `SnapshotErr`, Phase 3)~~ *(struck 2026-11-26, "Remove it (Recommended)" (Q-G,
+  M88): not built; `SnapshotErr` goes with no successor)*; `acpserver`: `Options.ModelData func() *provider.ModelData` and
   `Options.ModelDataLine func(*provider.ModelData) string`; `internal/config`: the two keys' `Settings` fields; removed in
   Phase 3: `catalog.Snapshot`, `catalog.Source`. *(2026-11-25: `ModelData`, `ParseModelData` and `Options.ModelData` are
   built by 0071's pin (its P3), with nil handing no document; "nil is the current" is re-pointed: nil hands none, and
@@ -678,3 +687,37 @@ changing:
   reads the service's cached facts beside its own document (the PLAN's deviation cites the SDK's lines).
 
 Counts unchanged: 84 decided, 2 out of scope, 1 struck, 0 open; 87 rows.
+
+### Tenth addition (2026-11-26): Phase 3 re-grounded; Q-G put to the owner
+
+The PLAN's Phase 3 re-grounded this record at `101c6bb` (Phases 2 and 2b committed; go-llmprovider-sdk `v1.33.0`); its
+execution record of this date lists each moved line. No fact F1 to F12 changed, and Phase 3's rows (M19's last case, M33,
+M47 to M49) hold. One case is not decided here, so Phase 3 stops before its build:
+
+* **Q-G. What `ModelDataErr` reports once the built-in copy is gone** (D14, D21; 0005-PLAN F4-2a deviation 1). D14 renames
+  `SnapshotErr` to `ModelDataErr` and D21 lists the name, but no row says what it reports. `SnapshotErr` is the embedded
+  document's parse error (`llm/provider/model.go:34-40`), which `agentOptions` logs at warn as "model catalog"
+  (`internal/cli/agent.go:119-121`). After Phase 3 `llm/provider` parses no document of its own: the copy is read by
+  `internal/cli`, an unreadable copy is D3's warning, and no data in use is D13's, which is not given before a first attempt
+  (M63). A `ModelDataErr` that reported "no data", logged as today, would reach stderr in a headless or interactive run with no
+  copy (the PLAN's Phase 2 reading 5) and break M63's `none_untried`. The PLAN's Phase 3 stop lists three resolutions.
+
+No row is changed until Q-G is answered.
+
+*(2026-11-26: answered.)* The coordinator relayed the owner's answer, quoted exactly:
+
+| Ruling, as given | Label | Rows |
+| :--- | :--- | :--- |
+| Q-G. What `ModelDataErr` reports once the built-in copy is gone | "Remove it (Recommended)" | M88; D14, D21 |
+
+| Row | Input or state | Status | Outcome | Test | Decided by |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| M88 | `SnapshotErr` and its "model catalog" warning once the built-in copy is gone (Phase 3) | decided | both removed with the built-in copy; no `ModelDataErr`; a run with no model data logs no "model catalog" warning; an unreadable copy is D3's warning and no data in use D13's, which is not given before a first attempt (M63) | `TestNoModelCatalogWarning_0072` (`internal/cli`: `agentOptions` with no document current writes no "model catalog" record, on stderr or in the log); M63's `TestModelDataWarning_0072/none_untried` | the owner's ruling above; D3, D13 |
+
+What this changes above, as annotations: D14 (`SnapshotErr` removed, `ModelDataErr` not built), D21 (`ModelDataErr` struck).
+Counts after this addition: 85 decided, 2 out of scope, 1 struck, 0 open; 88 rows.
+
+*(2026-11-26, Phase 3 built: M47's "515,680 bytes smaller" is the document alone. Measured by the PLAN's Phase 3 (the same
+build before and after, CGO off, the stamps fixed), the binary is 529,504 bytes smaller on this Mac, 525,079 on the Linux
+machine and 518,656 on the Windows laptop: the document, `source.json`, the removed code, and the linker's section
+alignment. No row's outcome changes.)*

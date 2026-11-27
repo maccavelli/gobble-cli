@@ -21,7 +21,7 @@ const copyOnlyDoc = `{"openai":{"models":{"copy-only-1":{"name":"Copy Only One",
 	`"limit":{"context":64000,"output":4000}}}}}`
 
 // withCopy makes the copy reader return d, counting its reads, and leaves
-// no current document behind; the fetch counts its calls and fails.
+// the current document it found behind; the fetch counts its calls and fails.
 func withCopy(t *testing.T, d *provider.ModelData) (loads, fetches *atomic.Int64) {
 	t.Helper()
 	loads, fetches = &atomic.Int64{}, &atomic.Int64{}
@@ -37,9 +37,9 @@ func withCopy(t *testing.T, d *provider.ModelData) (loads, fetches *atomic.Int64
 		fetches.Add(1)
 		return offlineModelData(ctx, url, o)
 	}
+	keepModelData(t)
 	t.Cleanup(func() {
 		loadModelData, fetchModelData = oldLoad, oldFetch
-		provider.SetCurrentModelData(nil)
 	})
 	return loads, fetches
 }

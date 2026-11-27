@@ -21,6 +21,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "walk ceiling: %v\n", err)
 		os.Exit(2)
 	}
+	if err := installTestModelData(); err != nil { // 0072-MADR M48
+		fmt.Fprintf(os.Stderr, "model data: %v\n", err)
+		os.Exit(2)
+	}
 	os.Exit(m.Run())
 }
 

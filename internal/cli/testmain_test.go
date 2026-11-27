@@ -52,7 +52,8 @@ func noLogout(context.Context, string, provider.LoginOptions, provider.LoginStor
 }
 
 // offlineModelFacts is the tests' model facts: provider.ModelInfoWith with
-// no key, workspace, login or cache, so the SDK reads the snapshot and
+// no key, workspace, login or cache, so the SDK reads the current document
+// (the test data, 0072-MADR M48) and
 // models.json alone, asks no token source and starts no listing (0046-MADR
 // D3; 0046-PLAN deviation 4).
 func offlineModelFacts(_ provider.Options, id, model string, mj *catalog.ModelsJSON) llm.Model {
@@ -153,6 +154,10 @@ func TestMain(m *testing.M) {
 	if err := fsx.SetWalkCeiling(os.Getenv("GOTMPDIR"), os.TempDir()); err != nil {
 		fmt.Fprintf(os.Stderr, "walk ceiling: %v\n", err) //nolint:forbidigo // the test binary's own stderr
 		os.Exit(2)                                        //nolint:forbidigo // TestMain's exit
+	}
+	if err := installTestModelData(); err != nil { // 0072-MADR M48
+		fmt.Fprintf(os.Stderr, "model data: %v\n", err) //nolint:forbidigo // the test binary's own stderr
+		os.Exit(2)                                      //nolint:forbidigo // TestMain's exit
 	}
 	for _, v := range provider.CredentialVars() {
 		if err := os.Unsetenv(v); err != nil {

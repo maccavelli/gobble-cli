@@ -1,43 +1,10 @@
 package catalog
 
 import (
-	"bytes"
-	_ "embed" // the snapshot
 	"slices"
-	"time"
 
-	"github.com/maccavelli/gobble-cli/jsonx"
 	"github.com/maccavelli/gobble-cli/llm"
 )
-
-// snapshot is the nine models.dev sections go-llmprovider-sdk reads, made by
-// scripts/gen_catalog.py; source is where and when they came from.
-var (
-	//go:embed data/models.json
-	snapshot []byte
-	//go:embed data/source.json
-	source []byte
-)
-
-// Snapshot is a copy of the embedded models.dev document.
-func Snapshot() []byte { return bytes.Clone(snapshot) }
-
-// Source is where the snapshot was fetched from, "file" for a document
-// given to the generator, and when.
-func Source() (url string, fetched time.Time) {
-	var s struct {
-		Source  string `json:"source"`
-		Fetched string `json:"fetched"`
-	}
-	if jsonx.UnmarshalStrict(source, &s) != nil {
-		return "", time.Time{}
-	}
-	t, err := time.Parse("2006-01-02T15:04Z", s.Fetched)
-	if err != nil {
-		return s.Source, time.Time{}
-	}
-	return s.Source, t
-}
 
 // levelOff is the level that asks for no reasoning.
 const levelOff = "off"
